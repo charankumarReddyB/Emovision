@@ -23,3 +23,10 @@ pnpm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
+
+# Python Cache
+__pycache__/
+*.pyc
+*.pyo
+*.db
+
