@@ -1,0 +1,92 @@
+@import 'tailwindcss';
+
+@theme inline {
+  --color-background: #080c14;
+  --color-foreground: #e2e8f0;
+  --color-card: #0d1424;
+  --color-card-foreground: #e2e8f0;
+  --color-primary: #00d4ff;
+  --color-primary-foreground: #080c14;
+  --color-secondary: #131e30;
+  --color-secondary-foreground: #94a3b8;
+  --color-muted: #0f1923;
+  --color-muted-foreground: #64748b;
+  --color-accent: #7c3aed;
+  --color-accent-foreground: #e2e8f0;
+  --color-border: rgba(0, 212, 255, 0.1);
+  --color-ring: #00d4ff;
+  --radius: 10px;
+
+  /* Emotion colors */
+  --color-happy: #22c55e;
+  --color-sad: #60a5fa;
+  --color-angry: #ef4444;
+  --color-fear: #f97316;
+  --color-surprise: #a855f7;
+  --color-disgust: #84cc16;
+  --color-neutral: #94a3b8;
+}
+
+:root {
+  font-family: 'Inter', 'DM Sans', system-ui, sans-serif;
+  background-color: #080c14;
+  color: #e2e8f0;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 212, 255, 0.2);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 212, 255, 0.4);
+}
+
+/* Animations */
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+@keyframes scan-line {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100vh); }
+}
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes bbox-appear {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.animate-pulse-dot {
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+.animate-fade-in {
+  animation: fade-in 0.35s ease both;
+}
+.animate-bbox {
+  animation: bbox-appear 0.4s ease both;
+}
