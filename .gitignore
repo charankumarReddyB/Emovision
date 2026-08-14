@@ -1,6 +1,20 @@
 # Dependencies
 node_modules/
 frontend/node_modules/
+.venv/
+env/
+venv/
+
+# Testing & Cache
+.pytest_cache/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Databases & Runtime Data
+*.db
+backend/data/*.db
 
 # Production / Build
 dist/
@@ -23,10 +37,3 @@ pnpm-debug.log*
 Thumbs.db
 .vscode/
 .idea/
-
-# Python Cache
-__pycache__/
-*.pyc
-*.pyo
-*.db
-
