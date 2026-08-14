@@ -1,249 +1,408 @@
-import { useState } from 'react'
-import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, CartesianGrid, XAxis, YAxis } from 'recharts'
-import { SESSIONS, EMOTIONS, EMOTION_COLORS, EMOTION_ICONS } from '../data'
-import type { Session, Emotion } from '../types'
+import { useState, useEffect, useCallback } from 'react'
+import { EMOTIONS, EMOTION_COLORS, EMOTION_ICONS } from '../data'
+import type { Emotion, SessionSummary, Screen } from '../types'
+import { apiService } from '../services/api'
 
-const CustomTooltip = ({ active, payload }: any) => {
-  if (active && payload?.length) {
-    return (
-      <div className="px-3 py-2 rounded-lg text-xs" style={{ background: '#131e30', border: '1px solid rgba(0,212,255,0.15)', color: '#e2e8f0' }}>
-        {payload.map((p: any, i: number) => <div key={i}>{p.name}: <strong>{p.value}</strong></div>)}
-      </div>
-    )
-  }
-  return null
+interface Props {
+  onNavigate?: (screen: Screen, sessionId?: string) => void
 }
 
-function DetailModal({ session, onClose }: { session: Session; onClose: () => void }) {
-  const donutData = EMOTIONS.map(e => ({ name: e, value: session.emotionDist[e] }))
+export default function SessionHistory({ onNavigate }: Props) {
+  const [sessions, setSessions] = useState<SessionSummary[]>([])
+  const [totalSessions, setTotalSessions] = useState(0)
+  const [page, setPage] = useState(1)
+  const limit = 10
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center" style={{ background: 'rgba(4,8,16,0.85)' }} onClick={onClose}>
-      <div
-        className="w-[700px] max-h-[85vh] overflow-y-auto rounded-2xl p-6 space-y-5"
-        style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.18)' }}
-        onClick={e => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <div className="text-sm font-bold" style={{ color: '#e2e8f0' }}>Session Details</div>
-            <div className="text-xs font-mono mt-0.5" style={{ color: '#64748b' }}>{session.id}</div>
-          </div>
-          <button onClick={onClose} className="w-7 h-7 rounded-lg flex items-center justify-center transition-colors" style={{ background: 'rgba(0,212,255,0.08)', color: '#64748b' }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-          </button>
-        </div>
+  const [searchQuery, setSearchQuery] = useState('')
+  const [emotionFilter, setEmotionFilter] = useState<string>('all')
 
-        {/* Metadata grid */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Date', value: session.date },
-            { label: 'Start Time', value: session.startTime },
-            { label: 'Duration', value: session.duration },
-            { label: 'People Analyzed', value: session.people },
-            { label: 'Avg Confidence', value: `${session.avgConfidence}%` },
-            { label: 'Dominant Expression', value: session.dominant, color: EMOTION_COLORS[session.dominant] },
-          ].map(m => (
-            <div key={m.label} className="px-3 py-2.5 rounded-lg" style={{ background: '#09101d' }}>
-              <div className="text-xs mb-0.5" style={{ color: '#475569' }}>{m.label}</div>
-              <div className="text-sm font-semibold" style={{ color: m.color || '#e2e8f0' }}>{m.value}</div>
-            </div>
-          ))}
-        </div>
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
 
-        {/* Charts */}
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <div className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>Expression Distribution</div>
-            <div className="flex items-center gap-3">
-              <ResponsiveContainer width={100} height={100}>
-                <PieChart>
-                  <Pie data={donutData} cx="50%" cy="50%" innerRadius={28} outerRadius={46} paddingAngle={2} dataKey="value">
-                    {donutData.map(d => <Cell key={d.name} fill={EMOTION_COLORS[d.name as Emotion]} />)}
-                  </Pie>
-                  <Tooltip content={<CustomTooltip />} />
-                </PieChart>
-              </ResponsiveContainer>
-              <div className="space-y-1">
-                {EMOTIONS.map(e => (
-                  <div key={e} className="flex items-center gap-1.5 text-xs">
-                    <span className="w-1.5 h-1.5 rounded-full" style={{ background: EMOTION_COLORS[e] }} />
-                    <span style={{ color: '#94a3b8' }}>{e}</span>
-                    <span className="ml-auto font-mono" style={{ color: '#475569' }}>{session.emotionDist[e]}%</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
+  // Details Modal State
+  const [selectedDetails, setSelectedDetails] = useState<any | null>(null)
+  const [loadingDetails, setLoadingDetails] = useState(false)
 
-          <div>
-            <div className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>People Timeline</div>
-            <ResponsiveContainer width="100%" height={100}>
-              <AreaChart data={session.timeline}>
-                <defs>
-                  <linearGradient id="tGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#00d4ff" stopOpacity={0.2} />
-                    <stop offset="95%" stopColor="#00d4ff" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="2 2" stroke="rgba(0,212,255,0.04)" />
-                <XAxis dataKey="time" tick={{ fill: '#475569', fontSize: 9 }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fill: '#334155', fontSize: 9 }} axisLine={false} tickLine={false} />
-                <Tooltip content={<CustomTooltip />} />
-                <Area type="monotone" dataKey="people" stroke="#00d4ff" strokeWidth={1.5} fill="url(#tGrad)" name="People" />
-              </AreaChart>
-            </ResponsiveContainer>
-          </div>
-        </div>
+  const fetchHistory = useCallback(async () => {
+    try {
+      setLoading(true)
+      setError(null)
+      const res = await apiService.getSessions(page, limit)
+      setSessions(res.sessions || [])
+      setTotalSessions(res.total || 0)
+    } catch (err: any) {
+      setError(err.message || 'Failed to load session history from backend')
+    } finally {
+      setLoading(false)
+    }
+  }, [page, limit])
 
-        {/* Person IDs */}
-        <div>
-          <div className="text-xs font-semibold mb-2" style={{ color: '#64748b' }}>Individual Person IDs</div>
-          <div className="flex flex-wrap gap-2">
-            {session.persons.map(p => (
-              <div key={p.id} className="px-3 py-1.5 rounded-lg text-xs" style={{ background: `${EMOTION_COLORS[p.dominant]}12`, border: `1px solid ${EMOTION_COLORS[p.dominant]}30` }}>
-                <span className="font-mono font-bold" style={{ color: EMOTION_COLORS[p.dominant] }}>P{p.id}</span>
-                <span className="mx-1.5" style={{ color: '#334155' }}>·</span>
-                <span style={{ color: '#94a3b8' }}>{EMOTION_ICONS[p.dominant]} {p.dominant}</span>
-                <span className="mx-1.5" style={{ color: '#334155' }}>·</span>
-                <span className="font-mono" style={{ color: '#64748b' }}>{p.avgConfidence}%</span>
-              </div>
-            ))}
-          </div>
-        </div>
+  useEffect(() => {
+    fetchHistory()
+  }, [fetchHistory])
 
-        {/* Confidence stats */}
-        <div className="grid grid-cols-3 gap-3">
-          {[
-            { label: 'Highest Confidence', value: `${Math.max(...session.persons.map(p => p.avgConfidence))}%`, color: '#22c55e' },
-            { label: 'Lowest Confidence', value: `${Math.min(...session.persons.map(p => p.avgConfidence))}%`, color: '#f97316' },
-            { label: 'Std Deviation', value: `±${(Math.random() * 4 + 2).toFixed(1)}%`, color: '#a855f7' },
-          ].map(m => (
-            <div key={m.label} className="px-3 py-2.5 rounded-lg text-center" style={{ background: '#09101d' }}>
-              <div className="text-xs mb-1" style={{ color: '#475569' }}>{m.label}</div>
-              <div className="text-lg font-bold font-mono" style={{ color: m.color }}>{m.value}</div>
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-export default function SessionHistory() {
-  const [search, setSearch] = useState('')
-  const [filterExpression, setFilterExpression] = useState<string>('all')
-  const [filterDate, setFilterDate] = useState('')
-  const [detailSession, setDetailSession] = useState<Session | null>(null)
-
-  const filtered = SESSIONS.filter(s => {
-    if (search && !s.id.toLowerCase().includes(search.toLowerCase()) && !s.date.includes(search)) return false
-    if (filterExpression !== 'all' && s.dominant !== filterExpression) return false
-    if (filterDate && s.date !== filterDate) return false
-    return true
+  // Filter sessions locally by search query and emotion
+  const filteredSessions = sessions.filter((s) => {
+    const matchesSearch =
+      s.session_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (s.session_name && s.session_name.toLowerCase().includes(searchQuery.toLowerCase()))
+    const matchesEmotion =
+      emotionFilter === 'all' || s.dominant_expression === emotionFilter
+    return matchesSearch && matchesEmotion
   })
 
-  return (
-    <div className="flex-1 overflow-y-auto p-5 space-y-5 animate-fade-in">
-      {detailSession && <DetailModal session={detailSession} onClose={() => setDetailSession(null)} />}
+  const openDetailsModal = async (sessionId: string) => {
+    try {
+      setLoadingDetails(true)
+      const details = await apiService.getSessionDetails(sessionId)
+      setSelectedDetails(details)
+    } catch (err) {
+      console.error('Failed to load session details:', err)
+    } finally {
+      setLoadingDetails(false)
+    }
+  }
 
-      {/* Header */}
+  const totalPages = Math.ceil(totalSessions / limit) || 1
+
+  return (
+    <div className="flex-1 overflow-y-auto p-6 space-y-6 animate-fade-in">
+      {/* Header & Controls */}
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-bold tracking-wide" style={{ color: '#e2e8f0' }}>Session History</h2>
+        <div>
+          <h1 className="text-xl font-bold tracking-tight" style={{ color: '#e2e8f0' }}>
+            Session History Log
+          </h1>
+          <p className="text-sm mt-0.5" style={{ color: '#64748b' }}>
+            Historical Database Records of Multi-Person Emotion Recognition Runs
+          </p>
+        </div>
+
+        {/* Refresh button */}
+        <button
+          onClick={fetchHistory}
+          className="px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-1.5 transition-all"
+          style={{
+            background: '#0d1424',
+            color: '#00d4ff',
+            border: '1px solid rgba(0,212,255,0.2)',
+          }}
+        >
+          <svg
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
+            <path d="M23 4v6h-6" />
+            <path d="M1 20v-6h6" />
+            <path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15" />
+          </svg>
+          Refresh Log
+        </button>
+      </div>
+
+      {/* Filter and Search Bar */}
+      <div
+        className="p-4 rounded-xl flex items-center gap-4"
+        style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
+      >
+        {/* Search Input */}
+        <div className="relative flex-1">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search by Session ID or Name..."
+            className="w-full pl-9 pr-3 py-1.5 rounded-lg text-xs font-mono focus:outline-none"
+            style={{
+              background: '#070b13',
+              color: '#e2e8f0',
+              border: '1px solid rgba(0,212,255,0.15)',
+            }}
+          />
+          <svg
+            className="absolute left-3 top-2.5"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="#64748b"
+            strokeWidth="2"
+          >
+            <circle cx="11" cy="11" r="8" />
+            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+          </svg>
+        </div>
+
+        {/* Emotion Filter */}
         <div className="flex items-center gap-2">
-          <div className="relative">
-            <svg className="absolute left-2.5 top-1/2 -translate-y-1/2" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#475569" strokeWidth="2">
-              <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-            </svg>
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search sessions..."
-              className="text-xs pl-7 pr-3 py-1.5 rounded-lg w-44"
-              style={{ background: '#0d1424', color: '#94a3b8', border: '1px solid rgba(0,212,255,0.12)' }}
-            />
-          </div>
+          <label className="text-xs text-slate-400">Expression:</label>
           <select
-            value={filterExpression}
-            onChange={e => setFilterExpression(e.target.value)}
-            className="text-xs px-2.5 py-1.5 rounded-lg"
-            style={{ background: '#0d1424', color: '#94a3b8', border: '1px solid rgba(0,212,255,0.12)' }}
+            value={emotionFilter}
+            onChange={(e) => setEmotionFilter(e.target.value)}
+            className="text-xs px-3 py-1.5 rounded-lg font-medium focus:outline-none"
+            style={{
+              background: '#070b13',
+              color: '#00d4ff',
+              border: '1px solid rgba(0,212,255,0.15)',
+            }}
           >
             <option value="all">All Expressions</option>
-            {EMOTIONS.map(e => <option key={e} value={e}>{e}</option>)}
+            {EMOTIONS.map((e) => (
+              <option key={e} value={e}>
+                {EMOTION_ICONS[e]} {e}
+              </option>
+            ))}
           </select>
-          <input
-            type="date"
-            value={filterDate}
-            onChange={e => setFilterDate(e.target.value)}
-            className="text-xs px-2.5 py-1.5 rounded-lg"
-            style={{ background: '#0d1424', color: '#64748b', border: '1px solid rgba(0,212,255,0.12)', colorScheme: 'dark' }}
-          />
-          {(filterDate || filterExpression !== 'all' || search) && (
-            <button onClick={() => { setSearch(''); setFilterExpression('all'); setFilterDate('') }} className="text-xs px-2.5 py-1.5 rounded-lg" style={{ background: 'rgba(239,68,68,0.1)', color: '#f87171', border: '1px solid rgba(239,68,68,0.15)' }}>Clear</button>
-          )}
         </div>
       </div>
 
-      {/* Table */}
-      <div className="rounded-xl overflow-hidden" style={{ border: '1px solid rgba(0,212,255,0.1)' }}>
-        <table className="w-full">
-          <thead>
-            <tr style={{ background: '#0a1120' }}>
-              {['Session ID', 'Date', 'Start Time', 'Duration', 'People', 'Dominant', 'Avg Conf', ''].map(h => (
-                <th key={h} className="text-left px-4 py-3 text-xs font-semibold" style={{ color: '#475569', borderBottom: '1px solid rgba(0,212,255,0.08)' }}>{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {filtered.length === 0 && (
-              <tr><td colSpan={8} className="text-center py-10 text-xs" style={{ color: '#334155' }}>No sessions match the current filters</td></tr>
-            )}
-            {filtered.map((s, i) => (
-              <tr key={s.id} style={{ background: i % 2 === 0 ? '#0d1424' : '#0b1220', borderBottom: '1px solid rgba(0,212,255,0.05)' }}>
-                <td className="px-4 py-3 text-xs font-mono" style={{ color: '#64748b' }}>{s.id}</td>
-                <td className="px-4 py-3 text-xs" style={{ color: '#94a3b8' }}>{s.date}</td>
-                <td className="px-4 py-3 text-xs font-mono" style={{ color: '#64748b' }}>{s.startTime}</td>
-                <td className="px-4 py-3 text-xs font-mono" style={{ color: '#94a3b8' }}>{s.duration}</td>
-                <td className="px-4 py-3 text-xs font-bold" style={{ color: '#00d4ff' }}>{s.people}</td>
-                <td className="px-4 py-3">
-                  <span className="text-xs px-2 py-0.5 rounded font-medium" style={{ background: `${EMOTION_COLORS[s.dominant]}15`, color: EMOTION_COLORS[s.dominant] }}>
-                    {EMOTION_ICONS[s.dominant]} {s.dominant}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-xs font-mono font-bold" style={{ color: '#22c55e' }}>{s.avgConfidence}%</td>
-                <td className="px-4 py-3">
-                  <button
-                    onClick={() => setDetailSession(s)}
-                    className="text-xs px-3 py-1.5 rounded-lg transition-all"
-                    style={{ background: 'rgba(0,212,255,0.08)', color: '#00d4ff', border: '1px solid rgba(0,212,255,0.18)' }}
-                  >
-                    View Details
-                  </button>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      {error && (
+        <div
+          className="p-3 rounded-lg text-xs"
+          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}
+        >
+          Backend Error: {error}
+        </div>
+      )}
 
-      {/* Summary stats */}
-      <div className="grid grid-cols-4 gap-3">
-        {[
-          { label: 'Total Sessions', value: SESSIONS.length, color: '#00d4ff' },
-          { label: 'Total People', value: SESSIONS.reduce((a, s) => a + s.people, 0), color: '#a855f7' },
-          { label: 'Avg Session Duration', value: '00:41:55', color: '#f97316' },
-          { label: 'Overall Avg Confidence', value: `${(SESSIONS.reduce((a, s) => a + s.avgConfidence, 0) / SESSIONS.length).toFixed(1)}%`, color: '#22c55e' },
-        ].map(m => (
-          <div key={m.label} className="rounded-xl px-4 py-3 flex items-center gap-3" style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}>
-            <div>
-              <div className="text-xs mb-1" style={{ color: '#475569' }}>{m.label}</div>
-              <div className="text-xl font-bold font-mono" style={{ color: m.color }}>{m.value}</div>
+      {/* Table */}
+      {loading ? (
+        <div
+          className="rounded-xl p-8 flex items-center justify-center text-xs text-slate-400 animate-pulse"
+          style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
+        >
+          Loading session history records...
+        </div>
+      ) : filteredSessions.length === 0 ? (
+        <div
+          className="rounded-xl p-8 flex flex-col items-center justify-center text-center gap-2"
+          style={{ background: '#0d1424', border: '1px dashed rgba(0,212,255,0.2)' }}
+        >
+          <svg
+            width="36"
+            height="36"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="rgba(0,212,255,0.3)"
+            strokeWidth="1.5"
+          >
+            <rect x="3" y="4" width="18" height="16" rx="2" />
+            <line x1="16" y1="2" x2="16" y2="6" />
+            <line x1="8" y1="2" x2="8" y2="6" />
+            <line x1="3" y1="10" x2="21" y2="10" />
+          </svg>
+          <span className="text-xs text-slate-300 font-medium">No Matching Session Records Found</span>
+          <span className="text-xs text-slate-500 max-w-xs">
+            Try resetting your search query or expression filter, or record a new session.
+          </span>
+        </div>
+      ) : (
+        <div
+          className="rounded-xl overflow-hidden"
+          style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
+        >
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr
+                className="text-xs font-semibold uppercase tracking-wider border-b"
+                style={{
+                  borderColor: 'rgba(0,212,255,0.08)',
+                  background: '#09101d',
+                  color: '#475569',
+                }}
+              >
+                <th className="py-3 px-4">Session ID</th>
+                <th className="py-3 px-4">Date</th>
+                <th className="py-3 px-4">Duration</th>
+                <th className="py-3 px-4">People Count</th>
+                <th className="py-3 px-4">Dominant Expression</th>
+                <th className="py-3 px-4">Avg Confidence</th>
+                <th className="py-3 px-4 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y" style={{ borderColor: 'rgba(0,212,255,0.05)' }}>
+              {filteredSessions.map((s) => {
+                const domColor = EMOTION_COLORS[s.dominant_expression as Emotion] || '#00d4ff'
+                return (
+                  <tr key={s.session_id} className="hover:bg-slate-900/40 transition-colors text-xs">
+                    <td className="py-3 px-4 font-mono font-medium text-cyan-400">
+                      {s.session_id}
+                    </td>
+                    <td className="py-3 px-4 text-slate-300">{s.date}</td>
+                    <td className="py-3 px-4 text-slate-400 font-mono">
+                      {Math.round(s.duration_seconds)}s
+                    </td>
+                    <td className="py-3 px-4 text-slate-300 font-mono">
+                      {s.people_count}
+                    </td>
+                    <td className="py-3 px-4">
+                      <span
+                        className="px-2 py-0.5 rounded text-xs font-medium"
+                        style={{
+                          background: `${domColor}18`,
+                          color: domColor,
+                          border: `1px solid ${domColor}30`,
+                        }}
+                      >
+                        {EMOTION_ICONS[s.dominant_expression as Emotion] || '😐'}{' '}
+                        {s.dominant_expression}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 text-slate-300 font-mono font-bold">
+                      {s.average_confidence}%
+                    </td>
+                    <td className="py-3 px-4 text-right space-x-2">
+                      <button
+                        onClick={() => openDetailsModal(s.session_id)}
+                        className="px-2.5 py-1 rounded text-xs font-medium transition-all"
+                        style={{
+                          background: 'rgba(0,212,255,0.1)',
+                          color: '#00d4ff',
+                          border: '1px solid rgba(0,212,255,0.25)',
+                        }}
+                      >
+                        View Details
+                      </button>
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+
+          {/* Pagination Footer */}
+          <div
+            className="px-4 py-3 border-t flex items-center justify-between text-xs"
+            style={{ borderColor: 'rgba(0,212,255,0.08)', background: '#09101d' }}
+          >
+            <span className="text-slate-400">
+              Page <strong className="text-cyan-400">{page}</strong> of{' '}
+              <strong className="text-slate-200">{totalPages}</strong> ({totalSessions} total records)
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                className="px-3 py-1 rounded font-medium disabled:opacity-40"
+                style={{
+                  background: '#0d1424',
+                  color: '#94a3b8',
+                  border: '1px solid rgba(0,212,255,0.15)',
+                }}
+              >
+                Previous
+              </button>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="px-3 py-1 rounded font-medium disabled:opacity-40"
+                style={{
+                  background: '#0d1424',
+                  color: '#94a3b8',
+                  border: '1px solid rgba(0,212,255,0.15)',
+                }}
+              >
+                Next
+              </button>
             </div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {/* Details Inspection Modal */}
+      {selectedDetails && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm animate-fade-in">
+          <div
+            className="w-full max-w-lg rounded-xl p-6 space-y-4 shadow-2xl relative"
+            style={{
+              background: '#09101d',
+              border: '1px solid rgba(0,212,255,0.25)',
+            }}
+          >
+            <div className="flex items-center justify-between border-b pb-3" style={{ borderColor: 'rgba(0,212,255,0.1)' }}>
+              <div>
+                <h3 className="text-sm font-bold text-slate-100">
+                  Session Inspection Details
+                </h3>
+                <p className="text-xs font-mono text-cyan-400 mt-0.5">
+                  {selectedDetails.session_id}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedDetails(null)}
+                className="text-slate-400 hover:text-white text-base"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 text-xs">
+              <div className="p-2.5 rounded" style={{ background: '#0d1424' }}>
+                <span className="text-slate-500 block mb-0.5">Session Name</span>
+                <span className="text-slate-200 font-medium">
+                  {selectedDetails.session_name || 'Webcam Session'}
+                </span>
+              </div>
+              <div className="p-2.5 rounded" style={{ background: '#0d1424' }}>
+                <span className="text-slate-500 block mb-0.5">Source Type</span>
+                <span className="text-cyan-400 font-mono">
+                  {selectedDetails.source_type}
+                </span>
+              </div>
+              <div className="p-2.5 rounded" style={{ background: '#0d1424' }}>
+                <span className="text-slate-500 block mb-0.5">Start Time</span>
+                <span className="text-slate-300 font-mono">
+                  {selectedDetails.start_time || 'N/A'}
+                </span>
+              </div>
+              <div className="p-2.5 rounded" style={{ background: '#0d1424' }}>
+                <span className="text-slate-500 block mb-0.5">End Time</span>
+                <span className="text-slate-300 font-mono">
+                  {selectedDetails.end_time || 'N/A'}
+                </span>
+              </div>
+              <div className="p-2.5 rounded" style={{ background: '#0d1424' }}>
+                <span className="text-slate-500 block mb-0.5">Total Predictions</span>
+                <span className="text-purple-400 font-mono font-bold">
+                  {selectedDetails.total_predictions}
+                </span>
+              </div>
+              <div className="p-2.5 rounded" style={{ background: '#0d1424' }}>
+                <span className="text-slate-500 block mb-0.5">People Detected</span>
+                <span className="text-orange-400 font-mono font-bold">
+                  {selectedDetails.total_people_detected}
+                </span>
+              </div>
+              <div className="p-2.5 rounded" style={{ background: '#0d1424' }}>
+                <span className="text-slate-500 block mb-0.5">Dominant Expression</span>
+                <span className="text-green-400 font-bold">
+                  {selectedDetails.dominant_expression}
+                </span>
+              </div>
+              <div className="p-2.5 rounded" style={{ background: '#0d1424' }}>
+                <span className="text-slate-500 block mb-0.5">Average FPS</span>
+                <span className="text-cyan-400 font-mono font-bold">
+                  {selectedDetails.avg_fps}
+                </span>
+              </div>
+            </div>
+
+            <div className="pt-2 flex justify-end">
+              <button
+                onClick={() => setSelectedDetails(null)}
+                className="px-4 py-1.5 rounded text-xs font-semibold"
+                style={{ background: '#00d4ff', color: '#080c14' }}
+              >
+                Close Inspection
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

@@ -1,78 +1,64 @@
 """
 FastAPI Main Application Entrypoint for Emovision Backend.
+Integrates REST Endpoints, WebSocket Real-Time Stream, CORS Middleware, Database Initialization,
+and OpenAPI/Swagger Documentation at /docs.
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-import os
-import uuid
-from app.core.config import settings
-from app.db.database import init_db, create_session, get_db_connection
-from app.db.models import SessionCreateRequest, SessionResponse
+from fastapi.responses import JSONResponse
 
-# Initialize SQLite tables
+from app.core.config import settings
+from app.db.database import init_db
+from app.api.health import router as health_router
+from app.api.sessions import router as sessions_router
+from app.api.analytics import router as analytics_router
+from app.api.ws import router as ws_router
+
+# Initialize SQLite database tables
 init_db()
 
 app = FastAPI(
-    title=settings.PROJECT_NAME,
+    title="Emovision Backend API",
     version=settings.VERSION,
-    description="Backend API for Emovision Real-Time Human Emotion Recognition & Face Tracking"
+    description="Real-Time Multi-Person Facial Expression Recognition API Layer",
+    docs_url="/docs",
+    redoc_url="/redoc"
 )
 
-# Enable CORS for communication with frontend
+# CORS Configuration for local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Adjust for production security
+    allow_origins=[
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "*"
+    ],
     allow_credentials=True,
-    allow_methods=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["*"],
 )
 
-@app.get("/")
-def read_root():
+# Exception Handlers
+@app.exception_handler(Exception)
+async def global_exception_handler(request: Request, exc: Exception):
+    """Global exception handler returning clean JSON error responses."""
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={"detail": f"Internal Server Error: {str(exc)}"}
+    )
+
+# Include Routers
+app.include_router(health_router)
+app.include_router(sessions_router)
+app.include_router(analytics_router)
+app.include_router(ws_router)
+
+@app.get("/", include_in_schema=False)
+def root_redirect():
     return {
-        "status": "online",
         "project": settings.PROJECT_NAME,
-        "version": settings.VERSION,
-        "target_emotions": settings.EMOTION_CLASSES
+        "status": "online",
+        "documentation": "/docs",
+        "health": "/api/health"
     }
-
-@app.get("/health")
-def health_check():
-    """Health check endpoint confirming database and server readiness."""
-    try:
-        conn = get_db_connection()
-        conn.execute("SELECT 1")
-        conn.close()
-        db_status = "healthy"
-    except Exception as e:
-        db_status = f"unhealthy: {str(e)}"
-        
-    return {
-        "status": "ok",
-        "database": db_status,
-        "detector_type": settings.DETECTOR_TYPE,
-        "target_face_size": settings.TARGET_FACE_SIZE
-    }
-
-@app.post(f"{settings.API_PREFIX}/sessions", response_model=SessionResponse)
-def start_session(payload: SessionCreateRequest):
-    """Creates a new tracking session."""
-    session_id = str(uuid.uuid4())[:8]
-    res = create_session(session_id, payload.session_name, payload.source_type)
-    return {
-        "session_id": session_id,
-        "session_name": payload.session_name,
-        "source_type": payload.source_type,
-        "start_time": str(os.getenv("CURRENT_TIME", "")),
-        "status": "active"
-    }
-
-@app.get(f"{settings.API_PREFIX}/sessions")
-def list_sessions():
-    """Returns recent sessions logged in SQLite."""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM sessions ORDER BY start_time DESC LIMIT 20")
-    rows = [dict(row) for row in cursor.fetchall()]
-    conn.close()
-    return {"sessions": rows}

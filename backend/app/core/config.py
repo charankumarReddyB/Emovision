@@ -2,8 +2,15 @@
 Emovision Backend Configuration Module.
 Contains global settings, model configurations, and default paths.
 """
+import os
 from pathlib import Path
 from pydantic import BaseModel, Field
+
+try:
+    import dotenv
+    dotenv.load_dotenv(Path(__file__).resolve().parent.parent.parent / ".env")
+except Exception:
+    pass
 
 # Base Directory Paths
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
@@ -17,9 +24,11 @@ MODELS_DIR_PATH.mkdir(parents=True, exist_ok=True)
 class Settings(BaseModel):
     PROJECT_NAME: str = "Emovision Backend"
     VERSION: str = "1.0.0"
-    API_PREFIX: str = "/api/v1"
-    
-    # Storage & Paths
+    # Storage & Database Settings
+    DATABASE_TYPE: str = Field(default_factory=lambda: os.getenv("DATABASE_TYPE", "supabase").lower())
+    SUPABASE_URL: str = Field(default_factory=lambda: os.getenv("SUPABASE_URL", ""))
+    SUPABASE_KEY: str = Field(default_factory=lambda: os.getenv("SUPABASE_KEY", ""))
+    DATABASE_URL: str = Field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
     DATABASE_PATH: Path = DATA_DIR_PATH / "emovision.db"
     MODELS_DIR: Path = MODELS_DIR_PATH
     DATA_DIR: Path = DATA_DIR_PATH

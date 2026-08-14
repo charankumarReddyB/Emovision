@@ -1,0 +1,129 @@
+{
+  "model": "EmotionCNN (4-block ConvNet)",
+  "dataset": "FER2013",
+  "num_train_samples": 28709,
+  "num_val_samples": 3589,
+  "num_test_samples": 3589,
+  "test_accuracy": 0.6096,
+  "precision_macro": 0.5037,
+  "recall_macro": 0.5085,
+  "f1_score_macro": 0.499,
+  "precision_weighted": 0.5937,
+  "recall_weighted": 0.6096,
+  "f1_score_weighted": 0.594,
+  "train_accuracy_final": 0.2554,
+  "val_accuracy_final": 0.3683,
+  "train_loss_final": 1.8186,
+  "val_loss_final": 1.6308,
+  "best_performing_class": "Happy",
+  "worst_performing_class": "Disgust",
+  "per_class_metrics": {
+    "Angry": {
+      "precision": 0.49,
+      "recall": 0.5499,
+      "f1_score": 0.5182,
+      "support": 491
+    },
+    "Disgust": {
+      "precision": 0.0,
+      "recall": 0.0,
+      "f1_score": 0.0,
+      "support": 55
+    },
+    "Fear": {
+      "precision": 0.4615,
+      "recall": 0.2273,
+      "f1_score": 0.3046,
+      "support": 528
+    },
+    "Happy": {
+      "precision": 0.8084,
+      "recall": 0.8931,
+      "f1_score": 0.8486,
+      "support": 879
+    },
+    "Sad": {
+      "precision": 0.4389,
+      "recall": 0.5438,
+      "f1_score": 0.4857,
+      "support": 594
+    },
+    "Surprise": {
+      "precision": 0.742,
+      "recall": 0.726,
+      "f1_score": 0.7339,
+      "support": 416
+    },
+    "Neutral": {
+      "precision": 0.5852,
+      "recall": 0.6198,
+      "f1_score": 0.602,
+      "support": 626
+    }
+  },
+  "confusion_matrix": [
+    [
+      270,
+      0,
+      30,
+      31,
+      99,
+      7,
+      54
+    ],
+    [
+      34,
+      0,
+      11,
+      2,
+      6,
+      2,
+      0
+    ],
+    [
+      103,
+      1,
+      120,
+      28,
+      149,
+      64,
+      63
+    ],
+    [
+      15,
+      0,
+      4,
+      785,
+      30,
+      19,
+      26
+    ],
+    [
+      65,
+      0,
+      38,
+      47,
+      323,
+      6,
+      115
+    ],
+    [
+      17,
+      0,
+      41,
+      33,
+      6,
+      302,
+      17
+    ],
+    [
+      47,
+      0,
+      16,
+      45,
+      123,
+      7,
+      388
+    ]
+  ]
+}

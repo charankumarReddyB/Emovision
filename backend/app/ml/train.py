@@ -45,14 +45,18 @@ def train_model(
         print(f"\nTraining pipeline halted safely without inventing fake results.")
         return False
 
+    import os
+    if not torch.cuda.is_available():
+        torch.set_num_threads(os.cpu_count() or 8)
+
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print(f"Using compute device: {device}")
+    print(f"Using compute device: {device} (CPU Threads: {torch.get_num_threads()})")
 
     # 2. Instantiate Model, Loss, Optimizer & Scheduler
     model = EmotionCNN(num_classes=7).to(device)
     criterion = nn.CrossEntropyLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate, weight_decay=1e-4)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3, verbose=True)
+    scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=3)
 
     best_val_loss = float('inf')
     patience_counter = 0
@@ -143,6 +147,12 @@ def train_model(
             if patience_counter >= patience:
                 print(f"\n[Early Stopping] No improvement in validation loss for {patience} consecutive epochs.")
                 break
+
+    # Save training history
+    history_save_path = settings.MODELS_DIR / "training_history.json"
+    with open(history_save_path, "w") as f:
+        json.dump(history, f, indent=2)
+    print(f"  --> Training history saved to '{history_save_path}'")
 
     print("\nTraining Completed Successfully!")
     return True

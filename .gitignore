@@ -16,6 +16,8 @@ __pycache__/
 # Databases & Runtime Data
 *.db
 backend/data/*.db
+*.csv
+backend/data/dataset/
 
 # Production / Build
 dist/

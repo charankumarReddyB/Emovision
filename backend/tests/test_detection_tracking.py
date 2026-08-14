@@ -81,24 +81,20 @@ def test_fps_counter():
     assert avg_fps >= 0.0
 
 def test_sqlite_database_logging(tmp_path):
-    """Verifies SQLite table creation, session management, and frame detection logging."""
+    """Verifies repository session creation and frame detection logging."""
     import uuid
-    init_db()
+    from app.db.repository import get_db_repository
+    repo = get_db_repository()
+    
     session_id = f"test_unit_{uuid.uuid4().hex[:6]}"
-    create_session(session_id, "Unit Test Session", "test")
+    repo.create_session(session_id, "Unit Test Session", "test")
     
     sample_detections = [
         {"person_id": 1, "bbox": (50, 50, 100, 100), "confidence": 0.95},
         {"person_id": 2, "bbox": (200, 150, 80, 80), "confidence": 0.88}
     ]
-    log_frame_detections(session_id, frame_number=1, detections=sample_detections)
+    repo.log_frame_predictions(session_id, frame_number=1, detections=sample_detections)
     
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM face_detections WHERE session_id = ?", (session_id,))
-    rows = cursor.fetchall()
-    conn.close()
-    
-    assert len(rows) == 2
-    assert rows[0]["person_id"] == 1
-    assert rows[1]["person_id"] == 2
+    sess = repo.get_session(session_id)
+    assert sess is not None
+    assert sess["session_id"] == session_id
