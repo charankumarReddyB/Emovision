@@ -19,6 +19,30 @@ export default function LiveDetection() {
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wsRef = useRef<DetectionWebSocket | null>(null)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+
+  useEffect(() => {
+    let stream: MediaStream | null = null
+    if (cameraOn) {
+      navigator.mediaDevices
+        ?.getUserMedia({ video: { width: 1280, height: 720 } })
+        .then((mediaStream) => {
+          stream = mediaStream
+          if (videoRef.current) {
+            videoRef.current.srcObject = mediaStream
+          }
+        })
+        .catch((err) => {
+          console.warn('Webcam stream access:', err)
+        })
+    }
+
+    return () => {
+      if (stream) {
+        stream.getTracks().forEach((track) => track.stop())
+      }
+    }
+  }, [cameraOn])
 
   const handleMessage = useCallback((payload: any) => {
     if (payload.people) {
@@ -252,6 +276,18 @@ export default function LiveDetection() {
             className="relative flex-1 rounded-xl overflow-hidden"
             style={{ background: '#040810', border: '1px solid rgba(0,212,255,0.12)', minHeight: 0 }}
           >
+            {/* Live Webcam Stream */}
+            {cameraOn && (
+              <video
+                ref={videoRef}
+                autoPlay
+                playsInline
+                muted
+                className="absolute inset-0 w-full h-full object-cover"
+                style={{ opacity: 0.85 }}
+              />
+            )}
+
             {/* Cyber Grid overlay */}
             <div
               className="absolute inset-0"
