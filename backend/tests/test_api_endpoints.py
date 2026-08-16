@@ -70,8 +70,8 @@ def test_current_detection_endpoint():
     
     tracker = SessionTracker(session_id)
     sample_dets = [
-        {"person_id": 1, "bbox": (120, 80, 150, 160), "confidence": 0.95, "emotion": "Happy", "emotion_confidence": 0.92},
-        {"person_id": 2, "bbox": (300, 100, 140, 140), "confidence": 0.88, "emotion": "Neutral", "emotion_confidence": 0.85}
+        {"face_index": 1, "person_id": 1, "bbox": (120, 80, 150, 160), "confidence": 0.95, "emotion": "Happy", "emotion_confidence": 0.92},
+        {"face_index": 2, "person_id": 2, "bbox": (300, 100, 140, 140), "confidence": 0.88, "emotion": "Neutral", "emotion_confidence": 0.85}
     ]
     tracker.process_frame_detections(frame_number=1, detections=sample_dets)
     
@@ -92,8 +92,8 @@ def test_session_analytics_endpoint():
     
     tracker = SessionTracker(session_id)
     sample_dets = [
-        {"person_id": 1, "bbox": (100, 100, 50, 50), "emotion": "Happy", "emotion_confidence": 0.9},
-        {"person_id": 2, "bbox": (200, 200, 50, 50), "emotion": "Surprise", "emotion_confidence": 0.85}
+        {"face_index": 1, "person_id": 1, "bbox": (100, 100, 50, 50), "emotion": "Happy", "emotion_confidence": 0.9},
+        {"face_index": 2, "person_id": 2, "bbox": (200, 200, 50, 50), "emotion": "Surprise", "emotion_confidence": 0.85}
     ]
     tracker.process_frame_detections(frame_number=1, detections=sample_dets)
     
@@ -111,9 +111,9 @@ def test_person_analytics_endpoint():
     
     tracker = SessionTracker(session_id)
     # Log multi-frame timeline for Person 1: Neutral -> Happy -> Surprise
-    tracker.process_frame_detections(1, [{"person_id": 1, "bbox": (100, 100, 50, 50), "emotion": "Neutral", "emotion_confidence": 0.8}])
-    tracker.process_frame_detections(2, [{"person_id": 1, "bbox": (100, 100, 50, 50), "emotion": "Happy", "emotion_confidence": 0.9}])
-    tracker.process_frame_detections(3, [{"person_id": 1, "bbox": (100, 100, 50, 50), "emotion": "Surprise", "emotion_confidence": 0.85}])
+    tracker.process_frame_detections(1, [{"face_index": 1, "person_id": 1, "bbox": (100, 100, 50, 50), "emotion": "Neutral", "emotion_confidence": 0.8}])
+    tracker.process_frame_detections(2, [{"face_index": 1, "person_id": 1, "bbox": (100, 100, 50, 50), "emotion": "Happy", "emotion_confidence": 0.9}])
+    tracker.process_frame_detections(3, [{"face_index": 1, "person_id": 1, "bbox": (100, 100, 50, 50), "emotion": "Surprise", "emotion_confidence": 0.85}])
     
     p_resp = client.get(f"/api/session/{session_id}/person/1")
     assert p_resp.status_code == 200

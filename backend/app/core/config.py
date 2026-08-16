@@ -50,13 +50,16 @@ class Settings(BaseModel):
     
     # Target Emotion Classes (FER Standard)
     EMOTION_CLASSES: list[str] = [
+        "Angry",
+        "Disgust",
+        "Fear",
         "Happy",
         "Sad",
-        "Angry",
-        "Fear",
         "Surprise",
-        "Disgust",
         "Neutral"
     ]
+    
+    # Emotion Confidence Threshold (display 'Uncertain' if confidence < threshold)
+    CONFIDENCE_THRESHOLD: float = Field(default_factory=lambda: float(os.getenv("CONFIDENCE_THRESHOLD", "0.45")))
 
 settings = Settings()
