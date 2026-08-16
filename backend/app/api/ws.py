@@ -1,7 +1,7 @@
 """
 WebSocket Real-Time Streaming Endpoint for Emovision Backend.
-Processes webcam video frames using OpenCV YuNet DNN face detection
-and PyTorch facial expression classifier without person tracking.
+Processes base64 webcam video frames using SCRFD ONNX face detection,
+5-point geometric face alignment, and MobileFaceNet FER ONNX emotion classifier.
 """
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
@@ -43,29 +43,25 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
                 pass
 
             if frame is None or frame.size == 0:
-                await asyncio.sleep(0.05)
+                await asyncio.sleep(0.02)
                 continue
 
             frame_idx += 1
             
-            # 2. Execute Real OpenCV YuNet Face Detection + PyTorch Classifier
-            annotated_frame, live_stats = pipeline.process_frame(frame, frame_idx)
+            # 2. Execute SCRFD 5-point face detection + 112x112 face alignment + MobileFaceNet ONNX classifier
+            annotated_frame, live_stats, classified_detections = pipeline.process_frame_with_detections(frame, frame_idx)
             
-            # Extract detected faces
-            raw_dets = pipeline.detector.detect_faces(frame)
-            people_list = []
             h, w = frame.shape[:2]
+            people_list = []
             
-            for idx, det in enumerate(raw_dets, start=1):
-                bx, by, bw, bh = det.get("bbox", [0, 0, 0, 0])
-                chip = det.get("face_chip")
-                if chip is not None and chip.size > 0:
-                    emo, conf = pipeline.classifier.classify_face(chip)
-                else:
-                    emo, conf = "Neutral", 0.50
+            for det in classified_detections:
+                bx, by, bw, bh = det["bbox"]
+                emo = det["emotion"]
+                conf = det["emotion_confidence"]
 
                 people_list.append({
-                    "face_index": idx,
+                    "face_index": det["face_index"],
+                    "person_id": det["face_index"],
                     "expression": emo,
                     "confidence": round(float(conf), 2),
                     "bounding_box": {
@@ -88,7 +84,7 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
             }
 
             await websocket.send_json(payload)
-            await asyncio.sleep(0.03)
+            await asyncio.sleep(0.02)
 
     except WebSocketDisconnect:
         print(f"[WebSocket] Client disconnected for session '{session_id}'.")

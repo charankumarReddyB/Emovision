@@ -1,237 +1,202 @@
-# Emovision — Computer Vision-Based Real-Time Human Emotion Recognition Platform
+# Emovision — Real-Time Multi-Face Facial Expression Recognition System
 
-**B.Tech Capstone Project**  
-*Computer Vision-Based Real-Time Human Emotion Recognition Using Facial Expressions*
+**Capstone Project**  
+*High-Accuracy, Real-Time Multi-Face Facial Expression Recognition Using SCRFD / YuNet ONNX Face Detection, 5-Point Affine Face Alignment, and MobileFaceNet Deep Learning*
 
 ---
 
 ## 1. Project Overview
 
-**Emovision** is an end-to-end, multi-person facial expression recognition platform capable of dynamically detecting, tracking, and classifying facial emotions across **N visible people** in real time. Built with OpenCV, PyTorch/Keras lightweight CNNs, FastAPI, WebSocket streaming, Supabase PostgreSQL, and React + Tailwind CSS, the platform delivers 100+ FPS real-time emotion telemetry, temporal prediction smoothing, individual Person ID metrics, and rich interactive analytics dashboards.
+**Emovision** is a high-performance, production-ready computer vision platform designed for real-time facial expression recognition across **N visible faces** simultaneously. 
+
+The system implements a modular deep learning pipeline:
+- **High-Quality Face Detection**: Integrates **SCRFD-500M** (`scrfd_500m_bnkps.onnx`) and OpenCV **YuNet** (`face_detection_yunet_2023mar.onnx`) ONNX engines to locate faces and 5 facial keypoints (`left_eye`, `right_eye`, `nose`, `left_mouth`, `right_mouth`).
+- **Geometric 5-Point Affine Alignment**: Warps each detected face into a standardized 112×112 BGR chip using landmark affine transformations, preserving eye angle horizontal alignment for accurate feature extraction.
+- **MobileFaceNet ONNX Emotion Classifier**: OpenCV Zoo MobileFaceNet FER model (`facial_expression_recognition_mobilefacenet_2022july.onnx`) performing batch ONNX inference across 7 target expression classes with softmax probability normalization.
+- **FastAPI & WebSocket Telemetry**: Asynchronous WebSocket streaming (`/ws/detection/{session_id}`) broadcasting real-time expression statistics, confidence percentages, and bounding box coordinates to the web frontend.
+- **Supabase Cloud Database & Storage**: Production PostgreSQL persistence (`SupabaseRepository`) with local SQLite fallback for session analytics, aggregated stats, and exportable reports.
+- **Modern React Single Page Application**: Interactive dashboard featuring live webcam video overlay, facial bounding box overlays, emotion distribution charts, chronological timeline analytics, and session logs.
 
 ---
 
-## 2. Key Features
-
-- **Dynamic N-Person Tracking**: OpenCV face detector paired with a spatial Centroid & IoU tracker that assigns persistent, unique Person IDs (`Person 1`, `Person 2`, etc.) to visible faces.
-- **7 Target Facial Expression Classes**: Classifies faces into `Happy`, `Sad`, `Angry`, `Fear`, `Surprise`, `Disgust`, and `Neutral`.
-- **Temporal Prediction Smoothing**: Moving-window majority voting queue suppresses single-frame prediction flicker and noise.
-- **Real-Time WebSocket Telemetry**: Streams structured detection JSON frames (`person_id`, `expression`, `confidence`, `bounding_box`) at 12–16 Hz.
-- **Production Supabase PostgreSQL Database**: Cloud-hosted PostgreSQL persistence with asynchronous background logging for zero CV pipeline latency overhead, plus local SQLite fallback.
-- **Interactive React Figma Frontend**: Four screens — Dashboard (KPI cards, distribution donut chart, frequency bar chart), Live Detection (real-time video bounding box overlays & gauges), Analytics (person-wise selector, chronological emotion timelines, timeline area chart), and Session History (paginated inspection logs & detail modals).
-
----
-
-## 3. System Architecture
+## 2. Pipeline Architecture
 
 ```
-React Frontend (Vite + TS + Tailwind CSS)
-       │
-       ▼  (REST APIs / WebSocket Stream)
-FastAPI Application Layer (Python 3.14)
-       │
-       ├────► OpenCV Face Detection & Centroid Tracker (Person IDs)
-       ├────► Lightweight EmotionCNN Inference Engine (PyTorch)
-       ├────► Temporal Prediction Queue Smoother
-       │
-       ▼  (Asynchronous Thread Workers)
-Database Access Layer (DatabaseRepository Abstraction)
-       │
-       ├────► Supabase PostgreSQL (Production Cloud Database)
-       └────► SQLite Database (`data/emovision.db` Local Fallback)
+                                  EMOVISION PIPELINE ARCHITECTURE
+                                  
+  ┌──────────────┐     ┌────────────────────────────┐     ┌────────────────────────────────┐
+  │  Webcam /    │    │ SCRFD-500M / OpenCV YuNet │    │  5-Point Geometric Affine      │
+  │ Video Frame  ├────► ONNX Face Detector Engine   ├────► Alignment (112x112 Standard) │
+  └──────────────┘     └────────────────────────────┘     └───────────────┬────────────────┘
+                                                                          │
+  ┌──────────────┐     ┌────────────────────────────┐                     │ N Aligned Chips
+  │ React UI     │     │ FastAPI WebSocket Engine   │                     ▼
+  │ Live Stream  │◄────┤ Telemetry Broadcast JSON   │◄────────────────────┴────────────────┐
+  │ & Dashboard  │     │ & HUD Visual Renderer      │  MobileFaceNet ONNX FER Model        │
+  └──────────────┘     └────────────────────────────┘  7 Classes: Happy, Sad, Angry, Fear, │
+                                                       Surprise, Disgust, Neutral              │
+                                                       └───────────────────────────────────────┘
 ```
 
 ---
 
-## 4. Technology Stack
+## 3. Technology Stack
 
-- **Computer Vision & ML**: Python 3.14, OpenCV, PyTorch / Keras, NumPy, Pandas.
-- **Backend API**: FastAPI, Uvicorn, WebSockets, Pydantic v2, Python-Dotenv.
-- **Database Layer**: Supabase Python SDK, PostgreSQL, SQLAlchemy ORM, SQLite3.
-- **Frontend UI**: React 19, TypeScript, Vite 8, Tailwind CSS v4, Lucide React, Recharts.
-- **Testing & Quality**: Pytest, Httpx, Custom E2E Scaling Benchmark Suite.
+- **Computer Vision & Inference**: Python 3.10+, OpenCV, ONNX Runtime (`onnxruntime`), NumPy, SciPy.
+- **Backend Infrastructure**: FastAPI, Uvicorn, WebSockets, Asyncio, Pydantic v2, Python-Dotenv.
+- **Database & Storage**: Supabase Python SDK, PostgreSQL Cloud Database, SQLite3 local fallback.
+- **Frontend Web UI**: React 19, TypeScript, Vite, Tailwind CSS, Lucide React icons, Recharts.
+- **Testing & Quality Assurance**: Pytest, Httpx, End-to-End Multi-Face Benchmark Suite.
 
 ---
 
-## 5. Project Structure
+## 4. Repository Structure
 
 ```
 Emovision/
 ├── backend/
 │   ├── app/
-│   │   ├── api/                 # FastAPI REST Endpoint Routers (health, sessions, analytics)
-│   │   ├── core/                # Global Settings & Config (config.py)
-│   │   ├── db/                  # Database Layer (repository.py, database.py, orm_models.py)
-│   │   ├── models_weights/      # Pretrained CNN Weights (emotion_model.pth)
-│   │   ├── schemas/             # Pydantic Request/Response Schemas (api_schemas.py)
-│   │   └── services/            # CV & Pipeline Services (face_detector, face_tracker, emotion_classifier)
-│   ├── data/                    # Local SQLite Database Storage (emovision.db)
-│   ├── tests/                   # Pytest Unit Test Suite (28 unit tests)
-│   ├── .env.example             # Environment configuration template
-│   ├── main.py                  # FastAPI Application Entrypoint
-│   ├── migrate_sqlite_to_supabase.py # Data Migration Script
-│   ├── supabase_schema.sql      # PostgreSQL DDL Schema Script
-│   ├── test_full_suite.py       # E2E Benchmark Test Suite
-│   └── verify_supabase_live_data.py # Supabase Live Verification Tool
+│   │   ├── api/                 # FastAPI REST & WebSocket routers (health, sessions, analytics, ws)
+│   │   ├── core/                # Configuration and global settings (config.py)
+│   │   ├── db/                  # Database abstraction layer & Supabase integration
+│   │   ├── models_weights/      # Pretrained ONNX model weights (SCRFD, YuNet, MobileFaceNet)
+│   │   ├── schemas/             # Pydantic data validation schemas
+│   │   └── services/            # Face detection, 5-point alignment, ONNX classifier, pipeline services
+│   ├── data/                    # Local SQLite fallback database storage
+│   ├── tests/                   # Pytest automated test suite
+│   ├── main.py                  # FastAPI server entrypoint
+│   ├── test_full_suite.py       # E2E benchmark & test suite
+│   └── requirements.txt         # Backend Python dependencies
 ├── frontend/
 │   ├── src/
-│   │   ├── components/          # Layout & UI Components (Navbar, Header)
+│   │   ├── components/          # Reusable UI layout & navigation components
 │   │   ├── screens/             # Dashboard, LiveDetection, Analytics, SessionHistory
-│   │   ├── services/            # REST API Client (api.ts) & WebSocket Manager (websocket.ts)
-│   │   ├── types.ts             # TypeScript Application Interfaces
-│   │   └── App.tsx              # Main Navigation & Screen Routing
-│   ├── package.json             # React Dependencies & Scripts
-│   └── vite.config.ts           # Vite Build Configuration
-├── .gitignore                   # Security & Artifact Exclusion Policy
-└── README.md                    # Project Documentation
+│   │   ├── services/            # REST API client & WebSocket streaming service
+│   │   ├── types.ts             # TypeScript interface definitions
+│   │   └── App.tsx              # Main routing & application entrypoint
+│   ├── package.json             # React dependencies and scripts
+│   └── vite.config.ts           # Vite build configuration
+├── .gitignore                   # Version control exclusion rules
+└── README.md                    # Project documentation
 ```
 
 ---
 
-## 6. Installation & Prerequisites
+## 5. Prerequisites & Environment Setup
 
-### Prerequisites
-- Python 3.10+ (Python 3.14 recommended)
-- Node.js 18+ and npm
-- Git
+### System Requirements
+- **Python**: 3.10 or higher
+- **Node.js**: v18.0 or higher
+- **Git**: Installed and configured
 
-### Clone Repository
-```bash
-git clone https://github.com/charankumarReddyB/Emovision.git
-cd Emovision
-```
+### Installation
+
+1. **Clone the Repository**:
+   ```bash
+   git clone https://github.com/charankumarReddyB/Emovision.git
+   cd Emovision
+   ```
+
+2. **Backend Setup**:
+   ```bash
+   cd backend
+   python -m venv .venv
+   
+   # Windows PowerShell / CMD:
+   .venv\Scripts\activate
+   
+   # Linux / macOS:
+   source .venv/bin/activate
+
+   pip install -r requirements.txt
+   ```
+
+3. **Frontend Setup**:
+   ```bash
+   cd ../frontend
+   npm install
+   ```
 
 ---
 
-## 7. Environment Variables Configuration
+## 6. Environment Configuration
 
 Create a `.env` file in the `backend/` directory:
 
 ```env
-# Database Type: 'supabase' for production PostgreSQL, 'sqlite' for local fallback
+# Database configuration ('supabase' or 'sqlite')
 DATABASE_TYPE=supabase
 
-# Supabase Production Credentials
+# Supabase Credentials
 SUPABASE_URL=https://amvsouizmnzqkvpvegcu.supabase.co
-SUPABASE_KEY=your-supabase-service-role-or-anon-key
+SUPABASE_KEY=your-supabase-anon-or-service-role-key
 
-# Application Settings
+# Server settings
 DEBUG=False
 VERSION=1.0.0
 PORT=8000
 ```
 
-*Template reference available in `backend/.env.example`.*
-
 ---
 
-## 8. Supabase Setup Instructions
+## 7. Running the Application
 
-1. Log in to [Supabase](https://supabase.com) and open your project dashboard.
-2. Go to **Project Settings → API** to copy your `Project URL` and `service_role` secret key into `backend/.env`.
-3. Open **SQL Editor**, click **New Query**, and execute the DDL script from `backend/supabase_schema.sql`:
-   ```sql
-   -- Creates sessions and predictions tables, foreign keys, indexes, and RLS policies
-   ```
-4. *(Optional)* Migrate local SQLite history to Supabase:
-   ```bash
-   cd backend
-   .venv\Scripts\python migrate_sqlite_to_supabase.py
-   ```
-
----
-
-## 9. Backend Setup
-
-```bash
-cd backend
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-```
-
----
-
-## 10. Frontend Setup
-
-```bash
-cd frontend
-npm install
-```
-
----
-
-## 11. How to Run the Application
-
-### 1. Launch FastAPI Backend
+### 1. Start FastAPI Backend Server
 ```bash
 cd backend
 .venv\Scripts\python -m uvicorn main:app --host 127.0.0.1 --port 8000 --reload
 ```
-- REST API Server: `http://127.0.0.1:8000`
-- Interactive OpenAPI Swagger Docs: `http://127.0.0.1:8000/docs`
+- API Base URL: `http://127.0.0.1:8000`
+- Interactive OpenAPI Docs: `http://127.0.0.1:8000/docs`
 
-### 2. Launch React Frontend
+### 2. Start React Frontend Client
 ```bash
 cd frontend
-cmd /c npm run dev
+npm run dev
 ```
-- Web Client Application: `http://localhost:5173`
+- Web Application: `http://localhost:5173`
 
 ---
 
-## 12. API Documentation Summary
+## 8. API & WebSocket Endpoint Reference
 
 | Endpoint | Method | Description |
 | :--- | :---: | :--- |
-| `GET /api/health` | `GET` | System, CV model, tracking status, and server UTC timestamp. |
-| `GET /api/model/info` | `GET` | Emotion model name, 7 target classes, and input face dimensions `[48, 48]`. |
-| `POST /api/session/start` | `POST` | Initializes a new tracking session and returns `session_id`. |
-| `GET /api/session/{id}/current` | `GET` | Returns latest frame face bounding boxes, emotions, and confidence scores. |
-| `POST /api/session/{id}/end` | `POST` | Finalizes session, computes duration, prediction totals, and updates DB. |
-| `GET /api/session/{id}/analytics` | `GET` | Returns aggregate metrics, emotion distribution, and Person ID list. |
-| `GET /api/session/{id}/person/{p_id}` | `GET` | Returns individual metrics and chronological emotion timeline for Person ID. |
-| `GET /api/sessions` | `GET` | Returns paginated historical session logs (`page`, `limit`). |
-| `GET /api/sessions/{session_id}` | `GET` | Inspection details for a selected session. |
-| `WS /ws/detection/{session_id}` | `WS` | Real-time WebSocket stream delivering 12–16 Hz detection JSON frames. |
+| `GET /api/health` | `GET` | Health check returning status, database connectivity, and UTC timestamp. |
+| `GET /api/model` | `GET` | Model metadata, active ONNX detector, and target 7 facial emotion classes. |
+| `POST /api/session/start` | `POST` | Initializes a new live tracking session and returns `session_id`. |
+| `GET /api/session/{id}/current` | `GET` | Returns latest frame face bounding boxes, keypoints, emotions, and confidence. |
+| `POST /api/session/{id}/end` | `POST` | Finalizes tracking session, calculates aggregate metrics, and saves stats to DB. |
+| `GET /api/session/{id}/analytics` | `GET` | Aggregated analytics, dominant emotion counts, and facial telemetry. |
+| `GET /api/sessions` | `GET` | Paginated list of historical detection sessions. |
+| `WS /ws/detection/{session_id}` | `WS` | Real-time WebSocket connection streaming live detection frames & statistics. |
 
 ---
 
-## 13. Model Architecture & Pipeline Information
+## 9. Model Details & Performance
 
-- **Input Dimension**: `(48, 48, 1)` Grayscale face chips normalized to `[0.0, 1.0]`.
-- **Classifier**: Lightweight 4-block Convolutional Neural Network (`EmotionCNN`) with BatchNorm, MaxPool2d, Dropout (0.25/0.5), and 7 Dense linear outputs.
-- **Face Detection**: OpenCV Haar Cascade / DNN face detector extracting bounding boxes `(x, y, w, h)`.
-- **Multi-Person Tracking**: Centroid spatial distance & IoU overlap tracker maintaining persistent Person IDs across frame gaps up to 30 frames.
-
----
-
-## 14. Empirical Performance & Benchmarks
-
-All metrics were measured empirically on host hardware:
-
-- **Model Forward Pass Latency**: **2.20 ms** per face chip
-- **1-Face Pipeline Latency**: **9.80 ms** (**102.1 FPS**)
-- **2-Face Pipeline Latency**: **8.93 ms** (**111.9 FPS**)
-- **3-Face Pipeline Latency**: **7.85 ms** (**127.3 FPS**)
-- **5-Face Pipeline Latency**: **9.90 ms** (**101.0 FPS**)
-- **8-Face Pipeline Latency**: **13.40 ms** (**74.6 FPS**)
-- **WebSocket Broadcast Rate**: **12.4 – 15.6 Hz**
-- **REST API Latency**: **2.9 ms – 18.5 ms**
+- **Face Detection Engine**: SCRFD-500M (`scrfd_500m_bnkps.onnx`) & OpenCV YuNet (`face_detection_yunet_2023mar.onnx`) with 5 facial keypoints (`left_eye`, `right_eye`, `nose`, `left_mouth`, `right_mouth`).
+- **Face Alignment**: 5-point similarity transformation warping raw face bounding boxes to standardized 112×112 BGR chips.
+- **Emotion Classifier**: OpenCV Zoo MobileFaceNet FER ONNX Model (`facial_expression_recognition_mobilefacenet_2022july.onnx`) evaluating 7 classes (`Angry`, `Disgust`, `Fear`, `Happy`, `Neutral`, `Sad`, `Surprise`).
+- **Inference Latency**: `~38 ms per face (~26 FPS)` on standard CPU hardware.
 
 ---
 
-## 15. Testing & Verification Information
+## 10. Automated Testing
 
-Run automated unit and integration tests:
+Run backend tests using Pytest and the integrated benchmark suite:
 
 ```bash
-# 1. Run Pytest Unit Test Suite (28 unit tests)
-.\backend\.venv\Scripts\pytest backend/tests/ -v
+# Run unit & API integration tests
+cd backend
+.venv\Scripts\pytest tests/ -v
 
-# 2. Run Comprehensive Live E2E Benchmark Suite
-cd backend && .venv\Scripts\python test_full_suite.py
-
-# 3. Run Live Supabase Data Audit Script
-cd backend && .venv\Scripts\python verify_supabase_live_data.py
+# Run full end-to-end multi-face benchmark suite
+.venv\Scripts\python test_full_suite.py
 ```
+
+---
+
+## 11. License & Capstone Credits
+
+Developed as part of the Computer Vision Capstone Project on **Real-Time Human Emotion Recognition Using Facial Expressions**.

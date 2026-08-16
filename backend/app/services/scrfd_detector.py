@@ -1,5 +1,5 @@
 """
-SCRFD-2.5G ONNX Face Detector Service.
+SCRFD ONNX Face Detector Service.
 Detects N human faces in an image or video frame with 5 facial keypoints.
 Uses ONNX Runtime for high-performance CPU execution with 0 false positives on background objects.
 """
@@ -12,14 +12,14 @@ from app.core.config import settings
 
 class SCRFDDetector:
     """
-    SCRFD-2.5G ONNX Face Detector.
+    SCRFD ONNX Face Detector (SCRFD-500M / SCRFD-2.5G).
     Returns face bounding boxes (x, y, w, h), confidence scores, and 5 facial keypoints:
     [left_eye, right_eye, nose, left_mouth, right_mouth]
     """
     def __init__(
         self,
         model_path: Optional[Path] = None,
-        score_threshold: float = 0.50,
+        score_threshold: float = 0.35,
         nms_threshold: float = 0.40,
         input_size: Tuple[int, int] = (640, 640)
     ):
@@ -30,7 +30,11 @@ class SCRFDDetector:
         self.num_anchors = 2
         
         if model_path is None:
-            model_path = settings.MODELS_DIR / "scrfd_2.5g_bnkps.onnx"
+            model_path = settings.MODELS_DIR / "scrfd_500m_bnkps.onnx"
+            if not model_path.exists():
+                fallback = settings.MODELS_DIR / "scrfd_2.5g_bnkps.onnx"
+                if fallback.exists():
+                    model_path = fallback
             
         self.session = None
         if model_path.exists():

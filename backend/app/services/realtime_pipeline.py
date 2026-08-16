@@ -1,12 +1,11 @@
 """
 Master Real-Time Multi-Face Facial Expression Recognition Pipeline.
-Integrates SCRFD-2.5G Face Detection, 5-Point Affine Geometric Face Alignment,
-PyTorch Batch Expression Classification, Live Statistics, and HUD Rendering.
+Integrates SCRFD Face Detection, 5-Point Affine Geometric Face Alignment,
+MobileFaceNet ONNX Expression Classification, Live Statistics, and HUD Rendering.
 """
 import cv2
 import numpy as np
 import time
-import torch
 from typing import Tuple, Dict, Any, List, Optional
 
 from app.services.face_detector import FaceDetector
@@ -27,20 +26,29 @@ class RealtimePipeline:
         self.fps_counter.start()
         
     def process_frame(self, frame: np.ndarray, frame_idx: int) -> Tuple[np.ndarray, Dict[str, Any]]:
+        annotated_frame, live_stats, _ = self.process_frame_with_detections(frame, frame_idx)
+        return annotated_frame, live_stats
+
+    def process_frame_with_detections(
+        self,
+        frame: np.ndarray,
+        frame_idx: int
+    ) -> Tuple[np.ndarray, Dict[str, Any], List[Dict[str, Any]]]:
         """
-        Executes SCRFD face detection + 5-point keypoint alignment + batch PyTorch expression classification.
+        Executes SCRFD face detection + 5-point keypoint alignment + batch MobileFaceNet ONNX classification.
         
         Args:
             frame (np.ndarray): BGR OpenCV image frame.
             frame_idx (int): Current frame sequence index.
             
         Returns:
-            Tuple[np.ndarray, Dict[str, Any]]: (Annotated OpenCV Frame, Live Statistics Dict)
+            Tuple[np.ndarray, Dict[str, Any], List[Dict[str, Any]]]:
+                (Annotated Frame, Live Statistics Dict, Classified Detections List)
         """
         if frame is None or frame.size == 0:
-            return frame, {}
+            return frame, {}, []
 
-        # 1. Detect human faces in frame with 5 facial keypoints using SCRFD-2.5G
+        # 1. Detect human faces in frame with 5 facial keypoints using SCRFD
         raw_detections = self.detector.detect_faces(frame)
         
         # 2. Extract 5-point aligned face chips for batch inference
@@ -74,7 +82,7 @@ class RealtimePipeline:
         # 7. Render Visual HUD Overlay
         annotated_frame = self.render_hud(frame, classified_detections, live_stats)
         
-        return annotated_frame, live_stats
+        return annotated_frame, live_stats, classified_detections
 
     def render_hud(
         self,
