@@ -23,15 +23,14 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
     await websocket.accept()
     pipeline = RealtimePipeline(session_id=session_id, session_name="WebSocket Live Stream")
     frame_idx = 0
-    cap = None
     
     try:
         while True:
             frame = None
             
-            # 1. Check for incoming base64 video frame from client
+            # 1. Receive base64 video frame from client
             try:
-                data = await asyncio.wait_for(websocket.receive_text(), timeout=0.04)
+                data = await asyncio.wait_for(websocket.receive_text(), timeout=0.05)
                 if data:
                     if "," in data:
                         data = data.split(",")[1]
@@ -43,22 +42,13 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
             except Exception:
                 pass
 
-            # 2. Fallback to local OpenCV webcam if client doesn't stream base64 frame
             if frame is None or frame.size == 0:
-                if cap is None:
-                    cap = cv2.VideoCapture(0)
-                if cap.isOpened():
-                    ret, local_frame = cap.read()
-                    if ret and local_frame is not None and local_frame.size > 0:
-                        frame = local_frame
-
-            if frame is None or frame.size == 0:
-                await asyncio.sleep(0.04)
+                await asyncio.sleep(0.05)
                 continue
 
             frame_idx += 1
             
-            # 3. Execute Real OpenCV YuNet Face Detection + PyTorch Classifier
+            # 2. Execute Real OpenCV YuNet Face Detection + PyTorch Classifier
             annotated_frame, live_stats = pipeline.process_frame(frame, frame_idx)
             
             # Extract detected faces
@@ -103,6 +93,4 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
     except WebSocketDisconnect:
         print(f"[WebSocket] Client disconnected for session '{session_id}'.")
     finally:
-        if cap is not None and cap.isOpened():
-            cap.release()
         pipeline.close()

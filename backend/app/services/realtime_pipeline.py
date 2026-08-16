@@ -1,11 +1,12 @@
 """
 Master Real-Time Multi-Face Facial Expression Recognition Pipeline.
-Integrates YuNet Face Detection, Independent Face Crop Preprocessing,
-PyTorch Expression Classification, Live Statistics, and HUD Rendering.
+Integrates SCRFD-2.5G Face Detection, 5-Point Affine Geometric Face Alignment,
+PyTorch Batch Expression Classification, Live Statistics, and HUD Rendering.
 """
 import cv2
 import numpy as np
 import time
+import torch
 from typing import Tuple, Dict, Any, List, Optional
 
 from app.services.face_detector import FaceDetector
@@ -27,7 +28,7 @@ class RealtimePipeline:
         
     def process_frame(self, frame: np.ndarray, frame_idx: int) -> Tuple[np.ndarray, Dict[str, Any]]:
         """
-        Executes face detection + expression classification on input image frame.
+        Executes SCRFD face detection + 5-point keypoint alignment + batch PyTorch expression classification.
         
         Args:
             frame (np.ndarray): BGR OpenCV image frame.
@@ -39,37 +40,38 @@ class RealtimePipeline:
         if frame is None or frame.size == 0:
             return frame, {}
 
-        # 1. Detect human faces in frame using YuNet DNN
+        # 1. Detect human faces in frame with 5 facial keypoints using SCRFD-2.5G
         raw_detections = self.detector.detect_faces(frame)
         
-        # 2. Treat each detected face independently (Frame-level face index)
-        classified_detections = []
-        for idx, det in enumerate(raw_detections, start=1):
-            bbox = det.get("bbox")
-            chip = det.get("face_chip")
-            conf_det = det.get("confidence", 0.90)
+        # 2. Extract 5-point aligned face chips for batch inference
+        aligned_chips = [det["aligned_chip"] for det in raw_detections]
+        
+        # 3. Batch emotion classification for N faces
+        if aligned_chips:
+            emotions_list = self.classifier.classify_batch(aligned_chips)
+        else:
+            emotions_list = []
             
-            if chip is not None and chip.size > 0:
-                emotion, conf_emo = self.classifier.classify_face(chip)
-            else:
-                emotion, conf_emo = "Neutral", 0.50
-
+        # 4. Format classified face detections
+        classified_detections = []
+        for idx, (det, (emotion, conf)) in enumerate(zip(raw_detections, emotions_list), start=1):
             classified_detections.append({
                 "face_index": idx,
-                "bbox": bbox,
-                "detection_confidence": conf_det,
+                "bbox": det["bbox"],
+                "kps": det.get("kps"),
+                "detection_confidence": det["confidence"],
                 "emotion": emotion,
-                "emotion_confidence": conf_emo
+                "emotion_confidence": conf
             })
 
-        # 3. Update FPS
+        # 5. Update FPS
         current_fps = self.fps_counter.update()
         
-        # 4. Update Session Tracker Statistics
+        # 6. Update Session Tracker Statistics
         live_stats = self.session_tracker.process_frame_detections(frame_idx, classified_detections)
         live_stats["fps"] = current_fps
         
-        # 5. Render Visual HUD Overlay
+        # 7. Render Visual HUD Overlay
         annotated_frame = self.render_hud(frame, classified_detections, live_stats)
         
         return annotated_frame, live_stats
@@ -103,6 +105,13 @@ class RealtimePipeline:
             
             # Draw Box
             cv2.rectangle(hud, (x, y), (x + w, y + h), color, 2)
+            
+            # Draw 5 Keypoints if present
+            kps = det.get("kps")
+            if kps is not None:
+                for kp in kps:
+                    kx, ky = int(kp[0]), int(kp[1])
+                    cv2.circle(hud, (kx, ky), 2, (0, 255, 255), -1)
             
             # Label string: "Face 1 -- Happy -- 92%"
             label_str = f"Face {f_idx} -- {emotion} -- {conf*100:.0f}%"

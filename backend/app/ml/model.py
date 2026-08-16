@@ -1,16 +1,17 @@
 """
 CNN Model Architectures for Facial Expression Recognition (FER).
-Includes EmotionCNN baseline and ResNetEmotionCNN for real-time 7-emotion classification.
+Includes EmotionCNN baseline, ResNetEmotionCNN, MobileNetV3Emotion, and EfficientNetB0Emotion.
+Predicts logits across 7 emotion classes:
+[Angry, Disgust, Fear, Happy, Sad, Surprise, Neutral]
 """
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import torchvision.models as models
 
 class EmotionCNN(nn.Module):
     """
-    Lightweight Deep CNN for 48x48 Grayscale Facial Expression Recognition.
-    Predicts logits across 7 emotion classes:
-    [Angry, Disgust, Fear, Happy, Sad, Surprise, Neutral]
+    Lightweight Deep CNN baseline for 48x48 Grayscale Facial Expression Recognition.
     """
     def __init__(self, num_classes: int = 7):
         super(EmotionCNN, self).__init__()
@@ -84,9 +85,6 @@ class ResidualBlock(nn.Module):
         return self.relu(self.bn2(self.conv2(self.relu(self.bn1(self.conv1(x))))) + self.shortcut(x))
 
 class ResNetEmotionCNN(nn.Module):
-    """
-    Improved ResNet-18 style model for 48x48 Grayscale Facial Expression Recognition.
-    """
     def __init__(self, num_classes: int = 7):
         super().__init__()
         self.in_conv = nn.Sequential(nn.Conv2d(1, 32, 3, 1, 1, bias=False), nn.BatchNorm2d(32), nn.ReLU(True))
@@ -99,13 +97,70 @@ class ResNetEmotionCNN(nn.Module):
     def forward(self, x):
         return self.fc(self.p4(self.b4(self.p3(self.b3(self.p2(self.b2(self.p1(self.b1(self.in_conv(x))))))))))
 
+class MobileNetV3Emotion(nn.Module):
+    """
+    MobileNetV3 Transfer Learning Model for 7-Class Facial Expression Recognition.
+    """
+    def __init__(self, num_classes: int = 7, in_channels: int = 1):
+        super().__init__()
+        backbone = models.mobilenet_v3_small(weights=models.MobileNet_V3_Small_Weights.DEFAULT)
+        # Adapt first conv layer if 1-channel grayscale
+        if in_channels == 1:
+            orig_conv = backbone.features[0][0]
+            new_conv = nn.Conv2d(1, orig_conv.out_channels, kernel_size=orig_conv.kernel_size,
+                                 stride=orig_conv.stride, padding=orig_conv.padding, bias=False)
+            new_conv.weight.data = orig_conv.weight.data.mean(dim=1, keepdim=True)
+            backbone.features[0][0] = new_conv
+            
+        in_features = backbone.classifier[3].in_features
+        backbone.classifier[3] = nn.Linear(in_features, num_classes)
+        self.model = backbone
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        if x.shape[1] == 1:
+            pass # Already 1 channel
+        elif x.shape[1] == 3:
+            pass
+        return self.model(x)
+
+class EfficientNetB0Emotion(nn.Module):
+    """
+    EfficientNet-B0 Transfer Learning Model for 7-Class Facial Expression Recognition.
+    """
+    def __init__(self, num_classes: int = 7, in_channels: int = 1):
+        super().__init__()
+        backbone = models.efficientnet_b0(weights=models.EfficientNet_B0_Weights.DEFAULT)
+        if in_channels == 1:
+            orig_conv = backbone.features[0][0]
+            new_conv = nn.Conv2d(1, orig_conv.out_channels, kernel_size=orig_conv.kernel_size,
+                                 stride=orig_conv.stride, padding=orig_conv.padding, bias=False)
+            new_conv.weight.data = orig_conv.weight.data.mean(dim=1, keepdim=True)
+            backbone.features[0][0] = new_conv
+            
+        in_features = backbone.classifier[1].in_features
+        backbone.classifier[1] = nn.Linear(in_features, num_classes)
+        self.model = backbone
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        return self.model(x)
+
 def get_model(num_classes: int = 7, pretrained_path: str = None) -> nn.Module:
-    """Helper function to instantiate EmotionCNN or ResNetEmotionCNN model."""
-    model = EmotionCNN(num_classes=num_classes)
+    """Helper function to instantiate and load state_dict into appropriate model architecture."""
+    model = MobileNetV3Emotion(num_classes=num_classes)
     if pretrained_path:
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         state_dict = torch.load(pretrained_path, map_location=device)
-        if any(k.startswith('in_conv') for k in state_dict.keys()):
+        keys = list(state_dict.keys())
+        if any('features' in k for k in keys) and any('classifier' in k for k in keys):
+            if any('classifier.3' in k or 'classifier.1' in k for k in keys):
+                if any('classifier.1' in k for k in keys):
+                    model = EfficientNetB0Emotion(num_classes=num_classes)
+                else:
+                    model = MobileNetV3Emotion(num_classes=num_classes)
+        elif any('in_conv' in k for k in keys):
             model = ResNetEmotionCNN(num_classes=num_classes)
+        else:
+            model = EmotionCNN(num_classes=num_classes)
+            
         model.load_state_dict(state_dict)
     return model
