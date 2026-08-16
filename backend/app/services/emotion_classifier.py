@@ -1,7 +1,7 @@
 """
 Real-time Facial Expression Recognition (FER) Inference Engine.
-Loads trained EmotionCNN model weights and performs 7-emotion classification on cropped face regions.
-Integrates per-Person ID prediction caching for real-time high-FPS video streaming.
+Performs 7-emotion classification on cropped face regions.
+Supports both EmotionCNN and ResNetEmotionCNN model weights.
 """
 import torch
 import torch.nn.functional as F
@@ -10,14 +10,14 @@ import cv2
 from typing import List, Dict, Any, Tuple, Optional
 from pathlib import Path
 from app.core.config import settings
-from app.ml.model import EmotionCNN
+from app.ml.model import get_model, EmotionCNN, ResNetEmotionCNN
 from app.ml.dataset import LABEL_MAP
 from app.services.preprocessing import FacePreprocessor
 
 class EmotionClassifier:
     """
     Inference service for real-time facial expression classification.
-    Processes cropped face chips and predicts emotion label + confidence.
+    Processes cropped face chips and predicts emotion label + confidence score.
     """
     def __init__(self, model_path: Optional[Path] = None):
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -33,16 +33,15 @@ class EmotionClassifier:
         
         if model_path.exists():
             try:
-                self.model.load_state_dict(torch.load(model_path, map_location=self.device))
+                state_dict = torch.load(model_path, map_location=self.device)
+                if any(k.startswith('in_conv') for k in state_dict.keys()):
+                    self.model = ResNetEmotionCNN(num_classes=len(self.labels)).to(self.device)
+                self.model.load_state_dict(state_dict)
                 self.is_weights_loaded = True
             except Exception as e:
                 print(f"[EmotionClassifier Warning] Could not load weights from {model_path}: {e}")
                 
         self.model.eval()
-        
-        # Per-person ID prediction cache for real-time FPS optimization
-        self.prediction_cache: Dict[int, Dict[str, Any]] = {}
-        self.cache_ttl_frames = 3  # Re-evaluate every 3 frames per tracked person ID
 
     def predict_face(self, face_chip: np.ndarray) -> Tuple[str, float]:
         """
@@ -79,45 +78,22 @@ class EmotionClassifier:
 
         return emotion_label, round(confidence, 4)
 
+    def classify_face(self, face_chip: np.ndarray) -> Tuple[str, float]:
+        """Alias for predict_face."""
+        return self.predict_face(face_chip)
+
     def classify_tracked_faces(
         self,
-        tracked_detections: List[Dict[str, Any]],
+        detections: List[Dict[str, Any]],
         frame_idx: int = 0
     ) -> List[Dict[str, Any]]:
         """
-        Classifies facial expressions for N tracked faces dynamically.
-        Uses person_id prediction caching to maintain high real-time FPS.
-        
-        Args:
-            tracked_detections (List[Dict[str, Any]]): Face detections with assigned person_id.
-            frame_idx (int): Current frame index.
-            
-        Returns:
-            List[Dict[str, Any]]: Detections enriched with 'emotion' and 'emotion_confidence'.
+        Classifies facial expressions for N detected faces.
         """
-        for det in tracked_detections:
-            pid = det.get("person_id", -1)
+        for det in detections:
             face_chip = det.get("face_chip")
-
-            # Check cache for person_id to avoid redundant inference on every frame
-            if pid > 0 and pid in self.prediction_cache:
-                cached_data = self.prediction_cache[pid]
-                if (frame_idx - cached_data["last_frame"]) < self.cache_ttl_frames:
-                    det["emotion"] = cached_data["emotion"]
-                    det["emotion_confidence"] = cached_data["confidence"]
-                    continue
-
-            # Run inference
             label, conf = self.predict_face(face_chip)
             det["emotion"] = label
             det["emotion_confidence"] = conf
 
-            # Cache prediction
-            if pid > 0:
-                self.prediction_cache[pid] = {
-                    "emotion": label,
-                    "confidence": conf,
-                    "last_frame": frame_idx
-                }
-
-        return tracked_detections
+        return detections

@@ -396,7 +396,7 @@ export default function LiveDetection() {
                         color: color,
                       }}
                     >
-                      <span>Person {p.person_id}</span>
+                      <span>Face {p.face_index || p.person_id || index + 1}</span>
                       <span style={{ color: '#94a3b8' }}>—</span>
                       <span>{p.expression}</span>
                       <span style={{ color: '#94a3b8' }}>—</span>
@@ -465,7 +465,7 @@ export default function LiveDetection() {
             style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
           >
             <div className="text-xs mb-1" style={{ color: '#64748b' }}>
-              People Detected (Dynamic N)
+              Faces Detected (N)
             </div>
             <div className="text-3xl font-bold font-mono" style={{ color: '#00d4ff' }}>
               {persons.length}
@@ -566,36 +566,6 @@ export default function LiveDetection() {
                   />
                 </PieChart>
               </ResponsiveContainer>
-            </div>
-          )}
-
-          {/* Active Tracked Person IDs */}
-          {persons.length > 0 && (
-            <div
-              className="rounded-xl p-3"
-              style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
-            >
-              <div className="text-xs mb-2" style={{ color: '#64748b' }}>
-                Active Tracked Person IDs
-              </div>
-              <div className="flex flex-wrap gap-1.5">
-                {persons.map((p) => {
-                  const color = EMOTION_COLORS[p.expression as Emotion] || '#00d4ff'
-                  return (
-                    <span
-                      key={p.person_id}
-                      className="text-xs px-2 py-0.5 rounded font-mono"
-                      style={{
-                        background: `${color}15`,
-                        border: `1px solid ${color}40`,
-                        color: color,
-                      }}
-                    >
-                      P{p.person_id}
-                    </span>
-                  )
-                })}
-              </div>
             </div>
           )}
         </div>

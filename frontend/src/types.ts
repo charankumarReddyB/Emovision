@@ -8,7 +8,8 @@ export interface BoundingBox {
 }
 
 export interface PersonDetection {
-  person_id: number
+  person_id?: number
+  face_index?: number
   expression: Emotion
   confidence: number
   bounding_box: BoundingBox

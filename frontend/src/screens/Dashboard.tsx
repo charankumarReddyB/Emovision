@@ -159,7 +159,7 @@ export default function Dashboard({ onNavigate }: Props) {
             Computer Vision — Emotion Recognition Dashboard
           </h1>
           <p className="text-sm mt-0.5" style={{ color: '#64748b' }}>
-            Real-Time Multi-Person Facial Expression Recognition Capstone Project
+            Real-Time Multi-Person Facial Expression Recognition
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -178,9 +178,8 @@ export default function Dashboard({ onNavigate }: Props) {
             }}
           >
             <span
-              className={`w-2 h-2 rounded-full ${
-                backendStatus === 'Online' ? 'bg-green-400 animate-pulse' : 'bg-red-400'
-              }`}
+              className={`w-2 h-2 rounded-full ${backendStatus === 'Online' ? 'bg-green-400 animate-pulse' : 'bg-red-400'
+                }`}
             />
             Backend: {backendStatus}
           </div>
@@ -215,7 +214,7 @@ export default function Dashboard({ onNavigate }: Props) {
           className="p-3 rounded-lg text-xs flex items-center gap-2"
           style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><line x1="12" y1="8" x2="12" y2="12" /><line x1="12" y1="16" x2="12.01" y2="16" /></svg>
           Backend communication error: {error}
         </div>
       )}

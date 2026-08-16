@@ -7,11 +7,12 @@ Tests:
 4. Invalid/empty image input
 5. Model loading & weights initialization
 6. Confidence score output bounds (0.0 to 1.0)
-7. Real-time inference caching & performance
+7. Real-time inference speed
 """
 import pytest
 import numpy as np
 import torch
+import time
 import sys
 from pathlib import Path
 
@@ -57,9 +58,9 @@ def test_multiple_faces_in_one_frame():
     classifier = EmotionClassifier()
     
     sample_detections = [
-        {"person_id": 1, "bbox": (50, 50, 60, 60), "face_chip": np.ones((60, 60, 3), dtype=np.uint8)*100},
-        {"person_id": 2, "bbox": (200, 100, 70, 70), "face_chip": np.ones((70, 70, 3), dtype=np.uint8)*180},
-        {"person_id": 3, "bbox": (350, 200, 50, 50), "face_chip": np.ones((50, 50, 3), dtype=np.uint8)*220}
+        {"face_index": 1, "bbox": (50, 50, 60, 60), "face_chip": np.ones((60, 60, 3), dtype=np.uint8)*100},
+        {"face_index": 2, "bbox": (200, 100, 70, 70), "face_chip": np.ones((70, 70, 3), dtype=np.uint8)*180},
+        {"face_index": 3, "bbox": (350, 200, 50, 50), "face_chip": np.ones((50, 50, 3), dtype=np.uint8)*220}
     ]
     
     classified = classifier.classify_tracked_faces(sample_detections, frame_idx=0)
@@ -74,7 +75,7 @@ def test_multiple_faces_in_one_frame():
 def test_different_expression_classes():
     """Test 3: Different expression classes (7 FER emotions)."""
     labels = settings.EMOTION_CLASSES
-    expected_classes = ["Happy", "Sad", "Angry", "Fear", "Surprise", "Disgust", "Neutral"]
+    expected_classes = ["Angry", "Disgust", "Fear", "Happy", "Sad", "Surprise", "Neutral"]
     
     for cls_name in expected_classes:
         assert cls_name in labels
@@ -94,21 +95,13 @@ def test_invalid_empty_image_input():
     assert label_empty == "Neutral"
     assert conf_empty == 0.50
 
-def test_realtime_inference_caching_and_speed():
-    """Test 7: Real-time inference caching & speed."""
+def test_realtime_inference_speed():
+    """Test 7: Real-time inference speed."""
     classifier = EmotionClassifier()
+    dummy_chip = np.ones((60, 60, 3), dtype=np.uint8)*120
     
-    detections = [
-        {"person_id": 1, "bbox": (50, 50, 60, 60), "face_chip": np.ones((60, 60, 3), dtype=np.uint8)*120}
-    ]
-    
-    # Frame 0: Runs full inference
-    res_f0 = classifier.classify_tracked_faces(detections, frame_idx=0)
-    emo_f0 = res_f0[0]["emotion"]
-    
-    # Frame 1: Hits cache (fast)
-    res_f1 = classifier.classify_tracked_faces(detections, frame_idx=1)
-    emo_f1 = res_f1[0]["emotion"]
-    
-    assert emo_f0 == emo_f1
-    assert 1 in classifier.prediction_cache
+    t0 = time.perf_counter()
+    for _ in range(10):
+        label, conf = classifier.predict_face(dummy_chip)
+    elapsed_ms = (time.perf_counter() - t0) * 100.0
+    assert elapsed_ms < 1000.0

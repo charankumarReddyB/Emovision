@@ -1,7 +1,7 @@
 """
 WebSocket Real-Time Streaming Endpoint for Emovision Backend.
-Processes actual webcam frames using OpenCV Face Detection, Centroid Person Tracking,
-and PyTorch Facial Expression Classification.
+Processes webcam video frames using OpenCV YuNet DNN face detection
+and PyTorch facial expression classifier without person tracking.
 """
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 import asyncio
@@ -17,9 +17,8 @@ router = APIRouter(tags=["WebSocket"])
 @router.websocket("/ws/detection/{session_id}")
 async def websocket_detection_stream(websocket: WebSocket, session_id: str):
     """
-    WebSocket endpoint receiving webcam frames from frontend client or local camera feed,
-    executing real OpenCV face detection + PyTorch facial expression classifier,
-    and returning real face bounding box coordinates and emotion metrics.
+    WebSocket endpoint streaming real-time human face detections and facial expression metrics.
+    Treats each face in frame independently without persistent person IDs.
     """
     await websocket.accept()
     pipeline = RealtimePipeline(session_id=session_id, session_name="WebSocket Live Stream")
@@ -41,7 +40,7 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
                     frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             except asyncio.TimeoutError:
                 pass
-            except Exception as e:
+            except Exception:
                 pass
 
             # 2. Fallback to local OpenCV webcam if client doesn't stream base64 frame
@@ -59,38 +58,26 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
 
             frame_idx += 1
             
-            # 3. Execute Real OpenCV Face Detection + Centroid Tracking + PyTorch Classifier
+            # 3. Execute Real OpenCV YuNet Face Detection + PyTorch Classifier
+            annotated_frame, live_stats = pipeline.process_frame(frame, frame_idx)
+            
+            # Extract detected faces
             raw_dets = pipeline.detector.detect_faces(frame)
-            tracked_dets = pipeline.tracker.update(raw_dets)
-            
-            active_ids = [d.get("person_id") for d in tracked_dets if d.get("person_id")]
-            pipeline.smoother.cleanup_inactive_tracks(active_ids)
-            
-            classified_dets = pipeline.classifier.classify_tracked_faces(tracked_dets, frame_idx)
-            
-            for det in classified_dets:
-                pid = det.get("person_id", -1)
-                raw_emo = det.get("emotion", "Neutral")
-                raw_conf = det.get("emotion_confidence", 0.5)
-                if pid > 0:
-                    smoothed_emo, smoothed_conf = pipeline.smoother.smooth_prediction(pid, raw_emo, raw_conf)
-                    det["emotion"] = smoothed_emo
-                    det["emotion_confidence"] = smoothed_conf
-
-            current_fps = pipeline.fps_counter.update()
-            live_stats = pipeline.session_tracker.process_frame_detections(frame_idx, classified_dets)
-            live_stats["fps"] = current_fps
-
-            # 4. Format Real Bounding Box & Emotion Payload
             people_list = []
             h, w = frame.shape[:2]
-            for det in classified_dets:
-                pid = det.get("person_id", 1)
+            
+            for idx, det in enumerate(raw_dets, start=1):
                 bx, by, bw, bh = det.get("bbox", [0, 0, 0, 0])
+                chip = det.get("face_chip")
+                if chip is not None and chip.size > 0:
+                    emo, conf = pipeline.classifier.classify_face(chip)
+                else:
+                    emo, conf = "Neutral", 0.50
+
                 people_list.append({
-                    "person_id": pid,
-                    "expression": det.get("emotion", "Neutral"),
-                    "confidence": round(float(det.get("emotion_confidence", 0.8)), 2),
+                    "face_index": idx,
+                    "expression": emo,
+                    "confidence": round(float(conf), 2),
                     "bounding_box": {
                         "x": int(bx),
                         "y": int(by),
@@ -104,9 +91,9 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
             payload = {
                 "session_id": session_id,
                 "people_detected": len(people_list),
-                "fps": round(float(current_fps), 1),
+                "fps": round(float(live_stats.get("fps", 30.0)), 1),
                 "average_confidence": round(float(live_stats.get("average_confidence", 0.0)), 1),
-                "dominant_expression": live_stats.get("dominant_expression", "Neutral"),
+                "dominant_expression": live_stats.get("dominant_expression", "No face detected" if len(people_list) == 0 else "Neutral"),
                 "people": people_list
             }
 
