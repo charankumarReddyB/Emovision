@@ -11,7 +11,6 @@ Tests:
 """
 import pytest
 import numpy as np
-import torch
 import time
 import sys
 from pathlib import Path
@@ -20,15 +19,15 @@ from pathlib import Path
 sys.path.append(str(Path(__file__).resolve().parent.parent))
 
 from app.core.config import settings
-from app.ml.model import EmotionCNN
 from app.services.emotion_classifier import EmotionClassifier
-from test_face_pipeline import generate_synthetic_multi_face_frame
+
+VALID_LABELS = set(settings.EMOTION_CLASSES).union({"Uncertain"})
 
 def test_model_loading_and_architecture():
     """Test 5: Model loading & architecture structure."""
     classifier = EmotionClassifier()
-    assert classifier.model is not None
-    assert isinstance(classifier.model, torch.nn.Module)
+    assert classifier.session is not None
+    assert classifier.is_weights_loaded is True
     assert classifier.labels == settings.EMOTION_CLASSES
     assert len(classifier.labels) == 7
 
@@ -40,7 +39,7 @@ def test_single_face_emotion_prediction():
     emotion_label, conf = classifier.predict_face(dummy_face)
     
     assert isinstance(emotion_label, str)
-    assert emotion_label in settings.EMOTION_CLASSES
+    assert emotion_label in VALID_LABELS
     assert isinstance(conf, float)
     assert 0.0 <= conf <= 1.0
 
@@ -51,7 +50,7 @@ def test_confidence_output_bounds():
         random_face = np.random.randint(0, 256, (48, 48, 3), dtype=np.uint8)
         label, conf = classifier.predict_face(random_face)
         assert 0.0 <= conf <= 1.0
-        assert label in settings.EMOTION_CLASSES
+        assert label in VALID_LABELS
 
 def test_multiple_faces_in_one_frame():
     """Test 2: Multiple faces in one frame (N faces)."""
@@ -69,7 +68,7 @@ def test_multiple_faces_in_one_frame():
     for det in classified:
         assert "emotion" in det
         assert "emotion_confidence" in det
-        assert det["emotion"] in settings.EMOTION_CLASSES
+        assert det["emotion"] in VALID_LABELS
         assert 0.0 <= det["emotion_confidence"] <= 1.0
 
 def test_different_expression_classes():
@@ -103,5 +102,5 @@ def test_realtime_inference_speed():
     t0 = time.perf_counter()
     for _ in range(10):
         label, conf = classifier.predict_face(dummy_chip)
-    elapsed_ms = (time.perf_counter() - t0) * 100.0
-    assert elapsed_ms < 1000.0
+    elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    assert elapsed_ms < 5000.0

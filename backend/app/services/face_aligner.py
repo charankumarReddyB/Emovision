@@ -9,20 +9,20 @@ import numpy as np
 import torch
 from typing import Tuple, Optional
 
-# Standard 5-point landmark template for 48x48 face crop
-STANDARD_FACIAL_5KPS_48 = np.array([
-    [15.0, 17.0],  # Left Eye
-    [33.0, 17.0],  # Right Eye
-    [24.0, 27.0],  # Nose Tip
-    [17.0, 37.0],  # Left Mouth Corner
-    [31.0, 37.0]   # Right Mouth Corner
+# Standard 5-point landmark template for 112x112 face crop (InsightFace / OpenCV FER standard)
+STANDARD_FACIAL_5KPS_112 = np.array([
+    [38.2946, 51.6963],  # Left Eye
+    [73.5318, 51.5014],  # Right Eye
+    [56.0252, 71.7366],  # Nose Tip
+    [41.5493, 92.3655],  # Left Mouth Corner
+    [70.7299, 92.2041]   # Right Mouth Corner
 ], dtype=np.float32)
 
 class FaceAligner:
     """
     Performs 5-point geometric face alignment and standard preprocessing.
     """
-    def __init__(self, target_size: Tuple[int, int] = (48, 48)):
+    def __init__(self, target_size: Tuple[int, int] = (112, 112)):
         self.target_size = target_size
 
     def align_face(
@@ -40,14 +40,14 @@ class FaceAligner:
             bbox (Tuple[int, int, int, int], optional): Fallback bounding box (x, y, w, h).
             
         Returns:
-            np.ndarray: Aligned BGR face chip of shape (48, 48, 3).
+            np.ndarray: Aligned BGR face chip of shape (112, 112, 3).
         """
         if frame is None or frame.size == 0:
             return np.zeros((*self.target_size, 3), dtype=np.uint8)
 
         if kps is not None and len(kps) == 5:
             src_pts = kps.astype(np.float32)
-            dst_pts = STANDARD_FACIAL_5KPS_48.copy()
+            dst_pts = STANDARD_FACIAL_5KPS_112.copy()
             
             # Estimate partial affine matrix (rotation, uniform scale, translation)
             M, _ = cv2.estimateAffinePartial2D(src_pts, dst_pts, method=cv2.LMEDS)
@@ -78,38 +78,15 @@ class FaceAligner:
 
     def preprocess_aligned_face(self, aligned_chip: np.ndarray) -> np.ndarray:
         """
-        Standardized face preprocessing for PyTorch inference:
-        1. BGR -> Grayscale (48, 48)
-        2. Normalization: (img / 255.0 - 0.5) / 0.5  (range -1.0 to +1.0)
-        3. Shape: (1, 1, 48, 48) numpy array
-        
-        Args:
-            aligned_chip (np.ndarray): BGR face chip (48, 48, 3).
-            
-        Returns:
-            np.ndarray: Normalized 4D array shape (1, 1, 48, 48).
+        Standardized face preprocessing for OpenCV MobileFaceNet FER ONNX inference:
+        Input shape: (1, 3, 112, 112) BGR float array.
         """
         if aligned_chip is None or aligned_chip.size == 0:
             aligned_chip = np.zeros((*self.target_size, 3), dtype=np.uint8)
             
-        if len(aligned_chip.shape) == 3 and aligned_chip.shape[2] == 3:
-            gray = cv2.cvtColor(aligned_chip, cv2.COLOR_BGR2GRAY)
-        else:
-            gray = aligned_chip.copy()
+        if aligned_chip.shape[:2] != self.target_size:
+            aligned_chip = cv2.resize(aligned_chip, self.target_size)
             
-        if gray.shape[:2] != self.target_size:
-            gray = cv2.resize(gray, self.target_size)
-            
-        normalized = (gray.astype(np.float32) / 255.0 - 0.5) / 0.5
-        return normalized.reshape(1, 1, 48, 48)
-
-    def preprocess_batch(self, aligned_chips: list) -> torch.Tensor:
-        """
-        Preprocesses a list of N aligned face chips into a batch PyTorch tensor (N, 1, 48, 48).
-        """
-        if not aligned_chips:
-            return torch.empty((0, 1, 48, 48), dtype=torch.float32)
-            
-        processed_list = [self.preprocess_aligned_face(chip) for chip in aligned_chips]
-        batch_np = np.vstack(processed_list)
-        return torch.from_numpy(batch_np).float()
+        # Blob from BGR image: (1, 3, 112, 112)
+        blob = cv2.dnn.blobFromImage(aligned_chip, 1.0, self.target_size, (0.0, 0.0, 0.0), swapRB=False)
+        return blob

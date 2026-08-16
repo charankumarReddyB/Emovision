@@ -1,6 +1,6 @@
 """
 Real-time Facial Expression Recognition (FER) ONNX Inference Engine.
-Performs 7-emotion classification on cropped face regions using ONNX Runtime for high-speed batch inference.
+Uses OpenCV Zoo MobileFaceNet FER ONNX model for high-accuracy 7-emotion classification.
 Displays 'Uncertain' if prediction confidence is below configurable threshold.
 """
 import numpy as np
@@ -11,18 +11,33 @@ from pathlib import Path
 from app.core.config import settings
 from app.services.face_aligner import FaceAligner
 
+# Exact OpenCV MobileFaceNet FER ONNX Class Labels:
+OPENCV_FER_CLASSES = [
+    "Angry",
+    "Disgust",
+    "Fear",
+    "Happy",
+    "Neutral",
+    "Sad",
+    "Surprise"
+]
+
 class EmotionClassifier:
     """
     ONNX Runtime Inference service for real-time facial expression classification.
-    Processes N 5-point aligned face chips in a single ONNX batch pass [N, 1, 48, 48].
+    Processes N 5-point aligned face chips using OpenCV MobileFaceNet FER ONNX model.
     """
     def __init__(self, model_path: Optional[Path] = None):
-        self.labels = settings.EMOTION_CLASSES
-        self.aligner = FaceAligner()
+        self.labels = OPENCV_FER_CLASSES
+        self.aligner = FaceAligner(target_size=(112, 112))
         self.confidence_threshold = settings.CONFIDENCE_THRESHOLD
         
         if model_path is None:
-            model_path = settings.MODELS_DIR / "emotion_model.onnx"
+            model_path = settings.MODELS_DIR / "facial_expression_recognition_mobilefacenet_2022july.onnx"
+            if not model_path.exists():
+                fallback = settings.MODELS_DIR / "emotion_model.onnx"
+                if fallback.exists():
+                    model_path = fallback
             
         self.session = None
         self.is_weights_loaded = False
@@ -42,10 +57,10 @@ class EmotionClassifier:
 
     def classify_batch(self, face_chips: List[np.ndarray]) -> List[Tuple[str, float]]:
         """
-        Classifies N aligned face chips in a single ONNX Runtime batch pass.
+        Classifies N aligned face chips in ONNX Runtime.
         
         Args:
-            face_chips (List[np.ndarray]): List of N BGR face chips (48, 48, 3).
+            face_chips (List[np.ndarray]): List of N BGR face chips (112, 112, 3).
             
         Returns:
             List[Tuple[str, float]]: List of (Emotion Label, Confidence Score) per face.
@@ -54,12 +69,15 @@ class EmotionClassifier:
         if not face_chips or self.session is None:
             return []
 
-        # Preprocess list of N aligned face chips into batch numpy array (N, 1, 48, 48)
-        processed_list = [self.aligner.preprocess_aligned_face(chip) for chip in face_chips]
-        batch_np = np.vstack(processed_list).astype(np.float32)
+        # Preprocess list of N aligned face chips into individual (1, 3, 112, 112) blobs
+        blobs = [self.aligner.preprocess_aligned_face(chip) for chip in face_chips]
         
-        # Execute ONNX Runtime single-pass batch inference
-        outputs = self.session.run([self.output_name], {self.input_name: batch_np})[0]
+        raw_outputs = []
+        for blob in blobs:
+            out = self.session.run([self.output_name], {self.input_name: blob})[0]
+            raw_outputs.append(out[0])
+            
+        outputs = np.array(raw_outputs)
         probs = self._softmax(outputs)
         
         results = []
