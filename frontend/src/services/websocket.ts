@@ -104,6 +104,12 @@ export class DetectionWebSocket {
     this.setStatus('disconnected')
   }
 
+  public sendFrame(data: string) {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(data)
+    }
+  }
+
   public getStatus(): WebSocketStatus {
     return this.status
   }

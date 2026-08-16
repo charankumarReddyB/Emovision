@@ -44,6 +44,29 @@ export default function LiveDetection() {
     }
   }, [cameraOn])
 
+  // Stream live webcam frames to backend over WebSocket for real OpenCV face detection
+  useEffect(() => {
+    let interval: ReturnType<typeof setInterval> | null = null
+    const canvas = document.createElement('canvas')
+    canvas.width = 640
+    canvas.height = 480
+    const ctx = canvas.getContext('2d')
+
+    if (cameraOn && sessionActive && wsStatus === 'connected') {
+      interval = setInterval(() => {
+        if (videoRef.current && wsRef.current && videoRef.current.readyState >= 2) {
+          ctx?.drawImage(videoRef.current, 0, 0, 640, 480)
+          const base64Img = canvas.toDataURL('image/jpeg', 0.6)
+          wsRef.current.sendFrame(base64Img)
+        }
+      }, 100)
+    }
+
+    return () => {
+      if (interval) clearInterval(interval)
+    }
+  }, [cameraOn, sessionActive, wsStatus])
+
   const handleMessage = useCallback((payload: any) => {
     if (payload.people) {
       setPersons(payload.people)
@@ -343,17 +366,12 @@ export default function LiveDetection() {
 
                 // Normalize bounding box coordinates
                 const bbox = p.bounding_box || { x: 100, y: 100, width: 140, height: 140 }
-                let left = bbox.x
-                let top = bbox.y
-                let width = bbox.width
-                let height = bbox.height
-
-                if (left > 1) {
-                  left = (left / 640) * 100
-                  top = (top / 480) * 100
-                  width = (width / 640) * 100
-                  height = (height / 480) * 100
-                }
+                const frameW = (bbox as any).frame_width || 640
+                const frameH = (bbox as any).frame_height || 480
+                let left = (bbox.x / frameW) * 100
+                let top = (bbox.y / frameH) * 100
+                let width = (bbox.width / frameW) * 100
+                let height = (bbox.height / frameH) * 100
 
                 return (
                   <div
