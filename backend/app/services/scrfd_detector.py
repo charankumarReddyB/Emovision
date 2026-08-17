@@ -77,8 +77,8 @@ class SCRFDDetector:
             keep.append(i)
             xx1 = np.maximum(x1[i], x1[order[1:]])
             yy1 = np.maximum(y1[i], y1[order[1:]])
-            xx2 = np.maximum(x2[i], x2[order[1:]])
-            yy2 = np.maximum(y2[i], y2[order[1:]])
+            xx2 = np.minimum(x2[i], x2[order[1:]])
+            yy2 = np.minimum(y2[i], y2[order[1:]])
             
             w = np.maximum(0.0, xx2 - xx1 + 1)
             h = np.maximum(0.0, yy2 - yy1 + 1)
@@ -111,13 +111,19 @@ class SCRFDDetector:
 
         h_orig, w_orig = frame.shape[:2]
         w_in, h_in = self.input_size
+        # Compute aspect-ratio preserving scaling factor
+        r = min(float(w_in) / float(w_orig), float(h_in) / float(h_orig))
+        nw, nh = int(round(w_orig * r)), int(round(h_orig * r))
         
-        img_resized = cv2.resize(frame, (w_in, h_in))
-        scale_x = float(w_orig) / float(w_in)
-        scale_y = float(h_orig) / float(h_in)
+        resized_img = cv2.resize(frame, (nw, nh))
+        padded_img = np.full((h_in, w_in, 3), 127, dtype=np.uint8)
+        pad_x = (w_in - nw) // 2
+        pad_y = (h_in - nh) // 2
+        padded_img[pad_y:pad_y + nh, pad_x:pad_x + nw] = resized_img
+        scale = 1.0 / r
         
         # Prepare DNN blob normalized with Mean=127.5, Std=128.0
-        blob = cv2.dnn.blobFromImage(img_resized, 1.0 / 128.0, (w_in, h_in), (127.5, 127.5, 127.5), swapRB=True)
+        blob = cv2.dnn.blobFromImage(padded_img, 1.0 / 128.0, (w_in, h_in), (127.5, 127.5, 127.5), swapRB=True)
         
         outputs = self.session.run(self.output_names, {self.input_name: blob})
         
@@ -174,10 +180,10 @@ class SCRFDDetector:
             box = proposal_boxes[i]
             kps = proposal_kps[i]
             
-            x1 = max(0, int(box[0] * scale_x))
-            y1 = max(0, int(box[1] * scale_y))
-            x2 = min(w_orig, int(box[2] * scale_x))
-            y2 = min(h_orig, int(box[3] * scale_y))
+            x1 = max(0, int((box[0] - pad_x) * scale))
+            y1 = max(0, int((box[1] - pad_y) * scale))
+            x2 = min(w_orig, int((box[2] - pad_x) * scale))
+            y2 = min(h_orig, int((box[3] - pad_y) * scale))
             
             w_box = max(0, x2 - x1)
             h_box = max(0, y2 - y1)
@@ -186,8 +192,8 @@ class SCRFDDetector:
                 continue
                 
             scaled_kps = kps.copy()
-            scaled_kps[:, 0] *= scale_x
-            scaled_kps[:, 1] *= scale_y
+            scaled_kps[:, 0] = (scaled_kps[:, 0] - pad_x) * scale
+            scaled_kps[:, 1] = (scaled_kps[:, 1] - pad_y) * scale
             
             chip = frame[y1:y2, x1:x2].copy()
             
@@ -214,4 +220,4 @@ class SCRFDDetector:
             if not is_sub:
                 filtered.append(det)
 
-        return filtered[:3]
+        return filtered[:50]
