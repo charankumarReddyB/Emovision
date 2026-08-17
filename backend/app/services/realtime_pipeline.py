@@ -56,7 +56,8 @@ class RealtimePipeline:
         
         # 3. Batch emotion classification for N faces
         if aligned_chips:
-            emotions_list = self.classifier.classify_batch(aligned_chips)
+            kps_list = [det.get("kps") for det in raw_detections]
+            emotions_list = self.classifier.classify_batch(aligned_chips, kps_list=kps_list)
         else:
             emotions_list = []
             
@@ -64,12 +65,15 @@ class RealtimePipeline:
         classified_detections = []
         for idx, (det, (emotion, conf)) in enumerate(zip(raw_detections, emotions_list), start=1):
             classified_detections.append({
+                "person_id": idx,
                 "face_index": idx,
                 "bbox": det["bbox"],
                 "kps": det.get("kps"),
                 "detection_confidence": det["confidence"],
                 "emotion": emotion,
-                "emotion_confidence": conf
+                "emotion_confidence": conf,
+                "aligned_chip": det.get("aligned_chip"),
+                "face_chip": det.get("face_chip")
             })
 
         # 5. Update FPS

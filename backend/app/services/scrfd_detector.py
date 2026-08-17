@@ -8,7 +8,7 @@ import numpy as np
 import onnxruntime as ort
 from typing import List, Dict, Any, Tuple, Optional
 from pathlib import Path
-from app.core.config import settings
+from app.core.config import settings, BASE_DIR
 
 class SCRFDDetector:
     """
@@ -19,7 +19,7 @@ class SCRFDDetector:
     def __init__(
         self,
         model_path: Optional[Path] = None,
-        score_threshold: float = 0.35,
+        score_threshold: float = 0.50,
         nms_threshold: float = 0.40,
         input_size: Tuple[int, int] = (640, 640)
     ):
@@ -29,10 +29,11 @@ class SCRFDDetector:
         self.strides = [8, 16, 32]
         self.num_anchors = 2
         
+        models_dir = BASE_DIR / "app" / "models_weights"
         if model_path is None:
-            model_path = settings.MODELS_DIR / "scrfd_500m_bnkps.onnx"
+            model_path = models_dir / "scrfd_500m_bnkps.onnx"
             if not model_path.exists():
-                fallback = settings.MODELS_DIR / "scrfd_2.5g_bnkps.onnx"
+                fallback = models_dir / "scrfd_2.5g_bnkps.onnx"
                 if fallback.exists():
                     model_path = fallback
             
@@ -76,8 +77,8 @@ class SCRFDDetector:
             keep.append(i)
             xx1 = np.maximum(x1[i], x1[order[1:]])
             yy1 = np.maximum(y1[i], y1[order[1:]])
-            xx2 = np.minimum(x2[i], x2[order[1:]])
-            yy2 = np.minimum(y2[i], y2[order[1:]])
+            xx2 = np.maximum(x2[i], x2[order[1:]])
+            yy2 = np.maximum(y2[i], y2[order[1:]])
             
             w = np.maximum(0.0, xx2 - xx1 + 1)
             h = np.maximum(0.0, yy2 - yy1 + 1)
@@ -181,7 +182,7 @@ class SCRFDDetector:
             w_box = max(0, x2 - x1)
             h_box = max(0, y2 - y1)
             
-            if w_box < 15 or h_box < 15:
+            if w_box < 80 or h_box < 80:
                 continue
                 
             scaled_kps = kps.copy()
@@ -197,4 +198,20 @@ class SCRFDDetector:
                 "face_chip": chip
             })
             
-        return results
+        # Sort faces by bounding box area descending (largest face in front is Face 1)
+        results.sort(key=lambda d: d["bbox"][2] * d["bbox"][3], reverse=True)
+        
+        # Suppress sub-boxes contained inside a larger primary face box
+        filtered = []
+        for det in results:
+            bx, by, bw, bh = det["bbox"]
+            is_sub = False
+            for other in filtered:
+                ox, oy, ow, oh = other["bbox"]
+                if bx >= (ox - 10) and by >= (oy - 10) and (bx + bw) <= (ox + ow + 10) and (by + bh) <= (oy + oh + 10):
+                    is_sub = True
+                    break
+            if not is_sub:
+                filtered.append(det)
+
+        return filtered[:3]

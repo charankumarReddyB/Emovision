@@ -30,36 +30,12 @@ class Settings(BaseModel):
     SUPABASE_KEY: str = Field(default_factory=lambda: os.getenv("SUPABASE_KEY", ""))
     DATABASE_URL: str = Field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
     DATABASE_PATH: Path = DATA_DIR_PATH / "emovision.db"
-    MODELS_DIR: Path = MODELS_DIR_PATH
-    DATA_DIR: Path = DATA_DIR_PATH
+    # Root Models Directory & Colab Integration Contract
+    ROOT_MODELS_DIR: Path = BASE_DIR.parent / "models"
+    EMOTION_MODEL_NAME: str = "emotion_model.onnx"
+    FALLBACK_MODEL_NAME: str = "facial_expression_recognition_mobilefacenet_2022july.onnx"
     
-    # Face Detection Settings
-    DETECTOR_TYPE: str = "yunet_haar"  # 'yunet_haar', 'haar', 'dnn'
-    DETECTION_MIN_CONFIDENCE: float = 0.5
-    INPUT_WIDTH: int = 640
-    INPUT_HEIGHT: int = 480
-    
-    # Face Preprocessing Settings
-    TARGET_FACE_SIZE: tuple[int, int] = (48, 48)  # Standard input for emotion recognition CNNs
-    COLOR_MODE: str = "grayscale"  # 'grayscale' or 'rgb'
-    
-    # Multi-Face Tracking Settings
-    MAX_DISAPPEARED_FRAMES: int = 30  # Max frames an ID remains active without detection
-    IOU_THRESHOLD: float = 0.3         # Min IoU for matching faces across frames
-    MAX_CENTROID_DISTANCE: float = 100.0  # Max spatial pixel distance for tracking match
-    
-    # Target Emotion Classes (FER Standard)
-    EMOTION_CLASSES: list[str] = [
-        "Angry",
-        "Disgust",
-        "Fear",
-        "Happy",
-        "Sad",
-        "Surprise",
-        "Neutral"
-    ]
-    
-    # Emotion Confidence Threshold (display 'Uncertain' if confidence < threshold)
-    CONFIDENCE_THRESHOLD: float = Field(default_factory=lambda: float(os.getenv("CONFIDENCE_THRESHOLD", "0.45")))
+    # Emotion Confidence Threshold (display 'Uncertain' if confidence < 0.50)
+    CONFIDENCE_THRESHOLD: float = Field(default_factory=lambda: float(os.getenv("CONFIDENCE_THRESHOLD", "0.50")))
 
 settings = Settings()

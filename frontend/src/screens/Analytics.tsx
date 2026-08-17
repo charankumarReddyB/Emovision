@@ -13,8 +13,10 @@ import {
   ResponsiveContainer,
 } from 'recharts'
 import { EMOTIONS, EMOTION_COLORS, EMOTION_ICONS } from '../data'
-import type { Emotion, SessionSummary, SessionAnalyticsData, PersonAnalyticsData } from '../types'
+import type { Emotion, SessionSummary, SessionAnalyticsData, PersonAnalyticsData, PersonDetailCard } from '../types'
 import { apiService } from '../services/api'
+import { SessionPdfReport } from '../components/SessionPdfReport'
+import { Printer, User, Download } from 'lucide-react'
 
 interface Props {
   initialSessionId?: string | null
@@ -47,6 +49,7 @@ export default function Analytics({ initialSessionId }: Props) {
   const [loading, setLoading] = useState(true)
   const [loadingPerson, setLoadingPerson] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [showPdf, setShowPdf] = useState(false)
 
   // Load list of sessions on mount
   useEffect(() => {
@@ -104,8 +107,12 @@ export default function Analytics({ initialSessionId }: Props) {
       }
     }
     loadAnalytics()
+    const timer = setTimeout(() => {
+      if (isMounted) setLoading(false)
+    }, 3000)
     return () => {
       isMounted = false
+      clearTimeout(timer)
     }
   }, [selectedSessionId])
 
@@ -132,6 +139,16 @@ export default function Analytics({ initialSessionId }: Props) {
     }
   }, [selectedSessionId, selectedPersonId])
 
+  if (showPdf && sessionAnalytics) {
+    return (
+      <SessionPdfReport
+        analytics={sessionAnalytics}
+        sessionName={sessionAnalytics.session_name || 'Live Camera Session'}
+        onClose={() => setShowPdf(false)}
+      />
+    )
+  }
+
   if (loading && !sessionAnalytics) {
     return (
       <div className="flex-1 flex items-center justify-center p-8 text-xs text-slate-400 animate-pulse">
@@ -157,7 +174,7 @@ export default function Analytics({ initialSessionId }: Props) {
         </svg>
         <h3 className="text-sm font-bold text-slate-200">No Analytics Available</h3>
         <p className="text-xs text-slate-400 max-w-sm text-center">
-          No detection sessions found in SQLite database. Start a live session to view detailed emotion analytics.
+          No detection sessions found in database. Start a live session to view detailed emotion analytics.
         </p>
       </div>
     )
@@ -190,41 +207,46 @@ export default function Analytics({ initialSessionId }: Props) {
       {/* Top Header & Session Selector */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold tracking-tight" style={{ color: '#e2e8f0' }}>
-            Session Analytics
+          <h1 className="text-xl font-bold tracking-tight text-slate-100">
+            Session & Person Identification Analytics
           </h1>
-          <p className="text-sm mt-0.5" style={{ color: '#64748b' }}>
-            Comprehensive Multi-Person Facial Expression Insights
+          <p className="text-sm mt-0.5 text-slate-400">
+            Comprehensive Multi-Person Facial Expression Insights & PDF Report Generation
           </p>
         </div>
 
-        {/* Session Selector */}
-        <div className="flex items-center gap-2">
-          <label className="text-xs text-slate-400 font-medium">Select Session:</label>
-          <select
-            value={selectedSessionId}
-            onChange={(e) => setSelectedSessionId(e.target.value)}
-            className="text-xs px-3 py-1.5 rounded-lg font-mono font-medium focus:outline-none"
-            style={{
-              background: '#0d1424',
-              color: '#00d4ff',
-              border: '1px solid rgba(0,212,255,0.2)',
-            }}
-          >
-            {sessions.map((s) => (
-              <option key={s.session_id} value={s.session_id}>
-                {s.session_name || s.session_id} ({s.date})
-              </option>
-            ))}
-          </select>
+        {/* Action Controls */}
+        <div className="flex items-center gap-3">
+          {sessionAnalytics && (
+            <button
+              onClick={() => setShowPdf(true)}
+              className="px-3.5 py-1.5 rounded-lg text-xs font-semibold bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white flex items-center gap-1.5 shadow-lg shadow-cyan-500/20 transition"
+            >
+              <Printer size={14} />
+              <span>Export PDF Report</span>
+            </button>
+          )}
+
+          {/* Session Selector */}
+          <div className="flex items-center gap-2">
+            <label className="text-xs text-slate-400 font-medium">Select Session:</label>
+            <select
+              value={selectedSessionId}
+              onChange={(e) => setSelectedSessionId(e.target.value)}
+              className="text-xs px-3 py-1.5 rounded-lg font-mono font-medium bg-slate-900 text-cyan-400 border border-cyan-500/20 focus:outline-none"
+            >
+              {sessions.map((s) => (
+                <option key={s.session_id} value={s.session_id}>
+                  {s.session_name || s.session_id} ({s.date})
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {error && (
-        <div
-          className="p-3 rounded-lg text-xs"
-          style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.2)', color: '#f87171' }}
-        >
+        <div className="p-3 rounded-lg text-xs bg-red-500/10 border border-red-500/20 text-red-400">
           Analytics Error: {error}
         </div>
       )}
@@ -265,10 +287,9 @@ export default function Analytics({ initialSessionId }: Props) {
         ].map((kpi, idx) => (
           <div
             key={idx}
-            className="rounded-xl p-4 flex flex-col gap-1.5"
-            style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
+            className="rounded-xl p-4 flex flex-col gap-1.5 bg-slate-900 border border-cyan-500/10"
           >
-            <span className="text-xs" style={{ color: '#64748b' }}>
+            <span className="text-xs text-slate-400">
               {kpi.label}
             </span>
             <span
@@ -277,21 +298,76 @@ export default function Analytics({ initialSessionId }: Props) {
             >
               {kpi.value}
             </span>
-            <span className="text-xs" style={{ color: '#475569' }}>
+            <span className="text-xs text-slate-500">
               {kpi.sub}
             </span>
           </div>
         ))}
       </div>
 
+      {/* Person Identification Gallery Section */}
+      {sessionAnalytics?.persons_details && sessionAnalytics.persons_details.length > 0 && (
+        <div className="p-5 rounded-xl bg-slate-900 border border-cyan-500/20 space-y-4">
+          <h2 className="text-sm font-bold text-cyan-400 flex items-center gap-2">
+            <User size={18} />
+            <span>Person Identification & Facial Photo Cards</span>
+          </h2>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            {sessionAnalytics.persons_details.map((person: PersonDetailCard) => (
+              <div
+                key={person.person_id}
+                onClick={() => setSelectedPersonId(person.person_id)}
+                className={`p-3.5 rounded-xl border flex items-center space-x-3.5 cursor-pointer transition ${
+                  selectedPersonId === person.person_id
+                    ? 'bg-purple-950/40 border-purple-500 shadow-lg shadow-purple-500/10'
+                    : 'bg-slate-950/60 border-slate-800 hover:border-cyan-500/30'
+                }`}
+              >
+                {/* Face Thumbnail */}
+                <div className="w-14 h-14 bg-slate-800 rounded-lg overflow-hidden border border-cyan-500/30 flex items-center justify-center flex-shrink-0">
+                  {person.thumbnail_b64 ? (
+                    <img
+                      src={person.thumbnail_b64}
+                      alt={`Person ${person.person_id} face photo`}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : (
+                    <User size={24} className="text-slate-500" />
+                  )}
+                </div>
+
+                {/* Person Details */}
+                <div className="flex-1 min-w-0 text-xs">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="font-bold text-cyan-300">
+                      Person #{person.person_id}
+                    </span>
+                    <span
+                      className="px-1.5 py-0.5 rounded text-[10px] font-semibold text-white"
+                      style={{ backgroundColor: EMOTION_COLORS[person.dominant_emotion as Emotion] || '#3b82f6' }}
+                    >
+                      {person.dominant_emotion}
+                    </span>
+                  </div>
+                  <div className="text-slate-400">
+                    Conf: <strong className="text-slate-200">{person.average_confidence}%</strong>
+                  </div>
+                  <div className="text-slate-400">
+                    Frames: <strong className="text-slate-200">{person.total_detections}</strong>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* Session Charts Row */}
       <div className="grid grid-cols-5 gap-4">
         {/* Expression Distribution (Donut) */}
-        <div
-          className="col-span-2 rounded-xl p-4"
-          style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
-        >
-          <div className="text-sm font-semibold mb-4" style={{ color: '#94a3b8' }}>
+        <div className="col-span-2 rounded-xl p-4 bg-slate-900 border border-cyan-500/10">
+          <div className="text-sm font-semibold mb-4 text-slate-400">
             Expression Distribution (%)
           </div>
           <div className="flex items-center gap-4">
@@ -320,8 +396,8 @@ export default function Analytics({ initialSessionId }: Props) {
                     className="w-2 h-2 rounded-full shrink-0"
                     style={{ background: EMOTION_COLORS[e] }}
                   />
-                  <span style={{ color: '#94a3b8' }}>{e}</span>
-                  <span className="ml-auto font-mono" style={{ color: '#64748b' }}>
+                  <span className="text-slate-400">{e}</span>
+                  <span className="ml-auto font-mono text-slate-500">
                     {dist[e] !== undefined ? `${dist[e]}%` : '0%'}
                   </span>
                 </div>
@@ -331,11 +407,8 @@ export default function Analytics({ initialSessionId }: Props) {
         </div>
 
         {/* Expression Frequency (Bar) */}
-        <div
-          className="col-span-3 rounded-xl p-4"
-          style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
-        >
-          <div className="text-sm font-semibold mb-4" style={{ color: '#94a3b8' }}>
+        <div className="col-span-3 rounded-xl p-4 bg-slate-900 border border-cyan-500/10">
+          <div className="text-sm font-semibold mb-4 text-slate-400">
             Expression Count Frequency
           </div>
           <ResponsiveContainer width="100%" height={130}>
@@ -354,11 +427,8 @@ export default function Analytics({ initialSessionId }: Props) {
       </div>
 
       {/* Timeline Area Chart */}
-      <div
-        className="rounded-xl p-4"
-        style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
-      >
-        <div className="text-sm font-semibold mb-4" style={{ color: '#94a3b8' }}>
+      <div className="rounded-xl p-4 bg-slate-900 border border-cyan-500/10">
+        <div className="text-sm font-semibold mb-4 text-slate-400">
           Session Expression & People Timeline
         </div>
         <ResponsiveContainer width="100%" height={150}>
@@ -378,36 +448,31 @@ export default function Analytics({ initialSessionId }: Props) {
       </div>
 
       {/* Section: Individual Person Analytics */}
-      <div
-        className="rounded-xl p-5 space-y-4"
-        style={{ background: '#09101d', border: '1px solid rgba(168,85,247,0.2)' }}
-      >
+      <div className="rounded-xl p-5 space-y-4 bg-slate-950 border border-purple-500/20">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-sm font-bold tracking-wide" style={{ color: '#c084fc' }}>
+            <h2 className="text-sm font-bold tracking-wide text-purple-400">
               Individual Person Analytics
             </h2>
-            <p className="text-xs mt-0.5" style={{ color: '#64748b' }}>
+            <p className="text-xs text-slate-400 mt-0.5">
               Select a tracked Person ID to analyze individual facial expression behavior
             </p>
           </div>
 
-          {/* Person ID Tabs / Select */}
+          {/* Person ID Tabs */}
           {sessionAnalytics?.persons && sessionAnalytics.persons.length > 0 ? (
             <div className="flex items-center gap-1.5">
               {sessionAnalytics.persons.map((pid) => (
                 <button
                   key={pid}
                   onClick={() => setSelectedPersonId(pid)}
-                  className="px-3 py-1 rounded text-xs font-mono font-medium transition-all"
-                  style={{
-                    background:
-                      selectedPersonId === pid ? '#a855f7' : 'rgba(168,85,247,0.1)',
-                    color: selectedPersonId === pid ? '#080c14' : '#c084fc',
-                    border: '1px solid rgba(168,85,247,0.3)',
-                  }}
+                  className={`px-3 py-1 rounded text-xs font-mono font-medium transition-all ${
+                    selectedPersonId === pid
+                      ? 'bg-purple-600 text-white border border-purple-400'
+                      : 'bg-purple-950/40 text-purple-300 border border-purple-500/30'
+                  }`}
                 >
-                  Person {pid}
+                  Person #{pid}
                 </button>
               ))}
             </div>
@@ -418,24 +483,18 @@ export default function Analytics({ initialSessionId }: Props) {
 
         {loadingPerson ? (
           <div className="p-4 text-xs text-purple-400 animate-pulse">
-            Fetching Person {selectedPersonId} analytics...
+            Fetching Person #{selectedPersonId} analytics...
           </div>
         ) : personAnalytics ? (
           <div className="grid grid-cols-4 gap-4">
-            <div
-              className="rounded-lg p-3 flex flex-col gap-1"
-              style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
-            >
+            <div className="rounded-lg p-3 flex flex-col gap-1 bg-slate-900 border border-cyan-500/10">
               <span className="text-xs text-slate-400">Target Person</span>
               <span className="text-lg font-bold font-mono text-purple-400">
                 Person #{personAnalytics.person_id}
               </span>
             </div>
 
-            <div
-              className="rounded-lg p-3 flex flex-col gap-1"
-              style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
-            >
+            <div className="rounded-lg p-3 flex flex-col gap-1 bg-slate-900 border border-cyan-500/10">
               <span className="text-xs text-slate-400">Dominant Expression</span>
               <span className="text-lg font-bold text-green-400">
                 {EMOTION_ICONS[personAnalytics.dominant_expression as Emotion] || '😐'}{' '}
@@ -443,20 +502,14 @@ export default function Analytics({ initialSessionId }: Props) {
               </span>
             </div>
 
-            <div
-              className="rounded-lg p-3 flex flex-col gap-1"
-              style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
-            >
+            <div className="rounded-lg p-3 flex flex-col gap-1 bg-slate-900 border border-cyan-500/10">
               <span className="text-xs text-slate-400">Average Confidence</span>
               <span className="text-lg font-bold font-mono text-cyan-400">
                 {personAnalytics.average_confidence}%
               </span>
             </div>
 
-            <div
-              className="rounded-lg p-3 flex flex-col gap-1"
-              style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
-            >
+            <div className="rounded-lg p-3 flex flex-col gap-1 bg-slate-900 border border-cyan-500/10">
               <span className="text-xs text-slate-400">Total Samples</span>
               <span className="text-lg font-bold font-mono text-orange-400">
                 {personAnalytics.expression_timeline?.length || 0} frames
@@ -464,12 +517,9 @@ export default function Analytics({ initialSessionId }: Props) {
             </div>
 
             {/* Individual Donut & Timeline */}
-            <div
-              className="col-span-2 rounded-lg p-3"
-              style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
-            >
+            <div className="col-span-2 rounded-lg p-3 bg-slate-900 border border-cyan-500/10">
               <span className="text-xs font-semibold text-slate-400 mb-2 block">
-                Person {personAnalytics.person_id} Distribution (%)
+                Person #{personAnalytics.person_id} Distribution (%)
               </span>
               <div className="flex items-center gap-3">
                 <ResponsiveContainer width={100} height={100}>
@@ -503,10 +553,7 @@ export default function Analytics({ initialSessionId }: Props) {
               </div>
             </div>
 
-            <div
-              className="col-span-2 rounded-lg p-3"
-              style={{ background: '#0d1424', border: '1px solid rgba(0,212,255,0.1)' }}
-            >
+            <div className="col-span-2 rounded-lg p-3 bg-slate-900 border border-cyan-500/10">
               <span className="text-xs font-semibold text-slate-400 mb-2 block">
                 Expression Sequence History
               </span>

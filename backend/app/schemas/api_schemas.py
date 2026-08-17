@@ -1,6 +1,6 @@
 """
 Pydantic API Request and Response Schemas for Emovision Backend.
-Defines structured data models for health, model info, sessions, analytics, and detections.
+Defines structured data models for health, model info, sessions, analytics, person identification cards, and detections.
 """
 from pydantic import BaseModel, Field
 from typing import List, Dict, Optional, Any
@@ -38,7 +38,15 @@ class SessionEndResponse(BaseModel):
     total_people_detected: int = Field(..., example=3)
     dominant_expression: str = Field(..., example="Happy")
 
-# 3. Detection Schemas
+# 3. Person Identification Schemas
+class PersonDetailCard(BaseModel):
+    person_id: int = Field(..., example=1)
+    thumbnail_b64: Optional[str] = Field("", description="Base64 encoded JPEG face crop thumbnail URL")
+    dominant_emotion: str = Field(..., example="Happy")
+    average_confidence: float = Field(..., example=92.5)
+    total_detections: int = Field(..., example=120)
+
+# 4. Detection Schemas
 class BoundingBoxSchema(BaseModel):
     x: int = Field(..., example=120)
     y: int = Field(..., example=80)
@@ -59,7 +67,7 @@ class CurrentDetectionResponse(BaseModel):
     dominant_expression: str = Field(..., example="Happy")
     people: List[PersonDetectionSchema]
 
-# 4. Analytics Schemas
+# 5. Analytics Schemas
 class SessionAnalyticsResponse(BaseModel):
     session_id: str = Field(..., json_schema_extra={"example": "sess_a1b2c3"})
     total_people_detected: int = Field(..., json_schema_extra={"example": 4})
@@ -69,16 +77,18 @@ class SessionAnalyticsResponse(BaseModel):
     dominant_expression: str = Field(..., json_schema_extra={"example": "Happy"})
     session_duration_seconds: float = Field(..., json_schema_extra={"example": 120.5})
     persons: List[int] = Field(default_factory=list)
+    persons_details: List[PersonDetailCard] = Field(default_factory=list)
     avg_fps: float = Field(..., example=30.2)
 
 class PersonAnalyticsResponse(BaseModel):
     person_id: int = Field(..., example=1)
+    thumbnail_b64: Optional[str] = Field("", description="Base64 encoded JPEG face crop thumbnail")
     dominant_expression: str = Field(..., example="Happy")
     average_confidence: float = Field(..., example=91.2)
     expression_distribution: Dict[str, int] = Field(..., example={"Happy": 85, "Neutral": 15})
     expression_timeline: List[str] = Field(..., example=["Neutral", "Neutral", "Happy", "Happy", "Surprise", "Neutral"])
 
-# 5. History Schemas
+# 6. History Schemas
 class SessionSummarySchema(BaseModel):
     session_id: str = Field(..., example="sess_a1b2c3")
     session_name: str = Field(..., example="Live Webcam Session")
@@ -88,6 +98,7 @@ class SessionSummarySchema(BaseModel):
     dominant_expression: str = Field(..., example="Happy")
     average_confidence: float = Field(..., example=89.5)
     status: str = Field(..., example="completed")
+    persons_details: List[PersonDetailCard] = Field(default_factory=list)
 
 class SessionHistoryResponse(BaseModel):
     total: int = Field(..., example=15)

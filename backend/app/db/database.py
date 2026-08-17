@@ -71,3 +71,10 @@ def close_session(session_id: str, total_frames: int, avg_fps: float):
     """Delegates session finalization to active database repository (Supabase/SQLite)."""
     repo = get_db_repository()
     return repo.end_session(session_id=session_id, total_frames=total_frames, avg_fps=avg_fps)
+
+def save_person_thumbnails(session_id: str, persons_details: List[Dict[str, Any]]):
+    """Delegates person thumbnail saving to active database repository."""
+    repo = get_db_repository()
+    if hasattr(repo, 'save_person_thumbnails'):
+        return repo.save_person_thumbnails(session_id, persons_details)
+

@@ -61,6 +61,13 @@ class DatabaseRepository(ABC):
     def list_sessions(self, page: int = 1, limit: int = 10) -> Dict[str, Any]:
         pass
 
+    @abstractmethod
+    def save_person_thumbnails(self, session_id: str, persons_details: List[Dict[str, Any]]) -> bool:
+        pass
+
+
+_person_thumbnails_store: Dict[str, List[Dict[str, Any]]] = {}
+
 
 # -------------------------------------------------------------------------
 # Local SQLite Repository Implementation
@@ -71,6 +78,11 @@ class SqliteRepository(DatabaseRepository):
         self.engine = create_engine(f"sqlite:///{path}", connect_args={"check_same_thread": False})
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         Base.metadata.create_all(bind=self.engine)
+
+    def save_person_thumbnails(self, session_id: str, persons_details: List[Dict[str, Any]]) -> bool:
+        _person_thumbnails_store[session_id] = persons_details
+        return True
+
 
     def create_session(self, session_id: str, session_name: str = "Live Session", source_type: str = "webcam") -> Dict[str, Any]:
         db = self.SessionLocal()
@@ -223,6 +235,23 @@ class SqliteRepository(DatabaseRepository):
             dominant_emo = max(distribution, key=distribution.get) if distribution else "Neutral"
             avg_conf = float(sum(confidences) / len(confidences)) * 100 if confidences else 0.0
 
+            persons_details = _person_thumbnails_store.get(session_id, [])
+            if not persons_details and unique_pids:
+                persons_details = []
+                for p_id in sorted(list(unique_pids)):
+                    p_logs = [l for l in logs if l.person_id == p_id]
+                    p_emos = [l.emotion_label for l in p_logs if l.emotion_label]
+                    p_dom = Counter(p_emos).most_common(1)[0][0] if p_emos else "Neutral"
+                    p_confs = [l.emotion_confidence for l in p_logs if l.emotion_confidence is not None]
+                    p_avg_conf = round(float(sum(p_confs) / len(p_confs)) * 100, 1) if p_confs else 0.0
+                    persons_details.append({
+                        "person_id": p_id,
+                        "thumbnail_b64": "",
+                        "dominant_emotion": p_dom,
+                        "average_confidence": p_avg_conf,
+                        "total_detections": len(p_logs)
+                    })
+
             return {
                 "session_id": session_id,
                 "total_people_detected": len(unique_pids),
@@ -232,7 +261,8 @@ class SqliteRepository(DatabaseRepository):
                 "dominant_expression": dominant_emo,
                 "session_duration_seconds": sess.duration or 0.0,
                 "avg_fps": sess.avg_fps or 0.0,
-                "persons": sorted(list(unique_pids))
+                "persons": sorted(list(unique_pids)),
+                "persons_details": persons_details
             }
         finally:
             db.close()
@@ -331,15 +361,17 @@ class SqliteRepository(DatabaseRepository):
                              .all()
             sessions_list = []
             for s in sessions_raw:
+                p_details = _person_thumbnails_store.get(s.session_id, [])
                 sessions_list.append({
                     "session_id": s.session_id,
                     "session_name": s.session_name or "Session",
-                    "date": s.start_time.strftime("%Y-%m-%d") if s.start_time else "",
+                    "date": s.start_time.strftime("%Y-%m-%d %H:%M") if s.start_time else "",
                     "duration_seconds": s.duration or 0.0,
                     "people_count": s.total_people_detected or 0,
                     "dominant_expression": s.dominant_expression or "Neutral",
                     "average_confidence": round((s.avg_confidence or 0.0) * 100, 1),
-                    "status": s.status or "completed"
+                    "status": s.status or "completed",
+                    "persons_details": p_details
                 })
             return {
                 "total": total,
@@ -363,6 +395,8 @@ class SupabaseRepository(DatabaseRepository):
         self.client: Optional[Client] = None
         self.executor = ThreadPoolExecutor(max_workers=4)
 
+        self.fallback_repo = SqliteRepository()
+
         if HAS_SUPABASE_SDK and self.url and self.key:
             try:
                 self.client = create_client(self.url, self.key)
@@ -370,327 +404,102 @@ class SupabaseRepository(DatabaseRepository):
             except Exception as e:
                 print(f"[SupabaseRepository Warning] Could not initialize Supabase SDK client: {e}")
 
-        # Fallback to SqliteRepository if credentials incomplete
-        self.fallback_repo = SqliteRepository() if not self.client else None
-
     def create_session(self, session_id: str, session_name: str = "Live Session", source_type: str = "webcam") -> Dict[str, Any]:
-        if not self.client:
-            return self.fallback_repo.create_session(session_id, session_name, source_type)
-
-        now_iso = datetime.utcnow().isoformat()
-        data = {
-            "id": session_id,
-            "session_name": session_name,
-            "source_type": source_type,
-            "started_at": now_iso,
-            "status": "active"
-        }
-        res = self.client.table("sessions").upsert(data).execute()
-        return {
-            "session_id": session_id,
-            "session_name": session_name,
-            "source_type": source_type,
-            "start_time": now_iso,
-            "status": "active"
-        }
+        local_res = self.fallback_repo.create_session(session_id, session_name, source_type)
+        if self.client:
+            def _async_create():
+                try:
+                    now_iso = datetime.utcnow().isoformat()
+                    data = {
+                        "id": session_id,
+                        "session_name": session_name,
+                        "source_type": source_type,
+                        "started_at": now_iso,
+                        "status": "active"
+                    }
+                    self.client.table("sessions").upsert(data).execute()
+                except Exception as err:
+                    print(f"[Supabase Sync Warning] create_session sync failed: {err}")
+            self.executor.submit(_async_create)
+        return local_res
 
     def get_session(self, session_id: str) -> Optional[Dict[str, Any]]:
-        if not self.client:
-            return self.fallback_repo.get_session(session_id)
-
-        res = self.client.table("sessions").select("*").eq("id", session_id).execute()
-        if not res.data:
-            return None
-        sess = res.data[0]
-
-        # Query predictions count for session
-        pred_res = self.client.table("predictions").select("id", count="exact").eq("session_id", session_id).execute()
-        total_preds = pred_res.count if pred_res.count is not None else len(pred_res.data)
-
-        started = datetime.fromisoformat(sess["started_at"].replace("Z", "+00:00")) if sess.get("started_at") else None
-        ended = datetime.fromisoformat(sess["ended_at"].replace("Z", "+00:00")) if sess.get("ended_at") else None
-        if started and started.tzinfo is not None:
-            started = started.replace(tzinfo=None)
-        if ended and ended.tzinfo is not None:
-            ended = ended.replace(tzinfo=None)
-        duration = float(sess.get("duration", 0.0))
-        if not duration and started and ended:
-            duration = round(max((ended - started).total_seconds(), 0.0), 1)
-
-        return {
-            "session_id": sess["id"],
-            "session_name": sess.get("session_name", "Live Session"),
-            "source_type": sess.get("source_type", "webcam"),
-            "start_time": sess.get("started_at"),
-            "end_time": sess.get("ended_at"),
-            "duration_seconds": duration,
-            "total_frames": sess.get("total_frames", 0),
-            "total_predictions": total_preds,
-            "total_people_detected": sess.get("people_count", 0),
-            "avg_fps": float(sess.get("avg_fps", 0.0)),
-            "dominant_expression": sess.get("dominant_expression", "Neutral"),
-            "status": sess.get("status", "completed")
-        }
+        return self.fallback_repo.get_session(session_id)
 
     def end_session(self, session_id: str, total_frames: int = 0, avg_fps: float = 0.0) -> Dict[str, Any]:
-        if not self.client:
-            return self.fallback_repo.end_session(session_id, total_frames, avg_fps)
-
-        # Get existing session details
-        sess_res = self.client.table("sessions").select("*").eq("id", session_id).execute()
-        if not sess_res.data:
-            return {}
-
-        now_iso = datetime.utcnow().isoformat()
-        sess_raw = sess_res.data[0]
-        start_iso = sess_raw.get("started_at", now_iso)
-        start_dt = datetime.fromisoformat(start_iso.replace("Z", "+00:00")) if start_iso else datetime.utcnow()
-        if start_dt.tzinfo is not None:
-            start_dt = start_dt.replace(tzinfo=None)
-        now_dt = datetime.utcnow()
-        duration = round(max((now_dt - start_dt).total_seconds(), 0.0), 1)
-
-        # Fetch predictions to aggregate stats
-        preds_res = self.client.table("predictions").select("person_id, expression, confidence").eq("session_id", session_id).execute()
-        preds = preds_res.data or []
-
-        total_preds = len(preds)
-        unique_pids = set(p["person_id"] for p in preds if p["person_id"] > 0)
-        emotions = [p["expression"] for p in preds if p.get("expression")]
-        dominant_emo = Counter(emotions).most_common(1)[0][0] if emotions else "Neutral"
-
-        confidences = [p["confidence"] for p in preds if p.get("confidence") is not None]
-        avg_conf = float(sum(confidences) / len(confidences)) if confidences else 0.0
-
-        update_payload = {
-            "ended_at": now_iso,
-            "duration": duration,
-            "people_count": len(unique_pids),
-            "total_predictions": total_preds,
-            "dominant_expression": dominant_emo,
-            "average_confidence": round(avg_conf, 4),
-            "status": "completed"
-        }
-        self.client.table("sessions").update(update_payload).eq("id", session_id).execute()
-
-        return {
-            "session_id": session_id,
-            "start_time": start_iso,
-            "end_time": now_iso,
-            "duration_seconds": duration,
-            "total_predictions": total_preds,
-            "total_people_detected": len(unique_pids),
-            "dominant_expression": dominant_emo
-        }
+        local_res = self.fallback_repo.end_session(session_id, total_frames, avg_fps)
+        if self.client:
+            def _async_end():
+                try:
+                    now_iso = datetime.utcnow().isoformat()
+                    update_payload = {
+                        "ended_at": now_iso,
+                        "duration": local_res.get("duration_seconds", 0.0),
+                        "people_count": local_res.get("total_people_detected", 0),
+                        "total_predictions": local_res.get("total_predictions", 0),
+                        "dominant_expression": local_res.get("dominant_expression", "Neutral"),
+                        "status": "completed"
+                    }
+                    self.client.table("sessions").update(update_payload).eq("id", session_id).execute()
+                except Exception as err:
+                    print(f"[Supabase Sync Warning] end_session sync failed: {err}")
+            self.executor.submit(_async_end)
+        return local_res
 
     def log_frame_predictions(self, session_id: str, frame_number: int, detections: List[Dict[str, Any]]) -> bool:
-        if not self.client:
-            return self.fallback_repo.log_frame_predictions(session_id, frame_number, detections)
-
-        try:
-            records = []
-            now_iso = datetime.utcnow().isoformat()
-            for det in detections:
-                bbox = det.get("bbox", (0, 0, 0, 0))
-                records.append({
-                    "session_id": session_id,
-                    "person_id": det.get("person_id", -1),
-                    "frame_number": frame_number,
-                    "timestamp": now_iso,
-                    "expression": det.get("emotion", "Neutral"),
-                    "confidence": float(det.get("emotion_confidence", 0.0)),
-                    "x": int(bbox[0]),
-                    "y": int(bbox[1]),
-                    "width": int(bbox[2]),
-                    "height": int(bbox[3])
-                })
-            if records:
-                def _async_insert(url, key, recs):
-                    try:
-                        worker_client = create_client(url, key)
-                        worker_client.table("predictions").insert(recs).execute()
-                    except Exception as err:
-                        pass
-
-                self.executor.submit(_async_insert, self.url, self.key, records)
-            return True
-        except Exception as e:
-            print(f"[SupabaseRepository Error] Logging frame predictions failed: {e}")
-            return False
+        self.fallback_repo.log_frame_predictions(session_id, frame_number, detections)
+        if self.client:
+            try:
+                records = []
+                now_iso = datetime.utcnow().isoformat()
+                for det in detections:
+                    bbox = det.get("bbox", (0, 0, 0, 0))
+                    records.append({
+                        "session_id": session_id,
+                        "person_id": det.get("person_id", det.get("face_index", -1)),
+                        "frame_number": frame_number,
+                        "timestamp": now_iso,
+                        "expression": det.get("emotion", "Neutral"),
+                        "confidence": float(det.get("emotion_confidence", 0.0)),
+                        "x": int(bbox[0]),
+                        "y": int(bbox[1]),
+                        "width": int(bbox[2]),
+                        "height": int(bbox[3])
+                    })
+                if records:
+                    def _async_insert(url, key, recs):
+                        try:
+                            worker_client = create_client(url, key)
+                            worker_client.table("predictions").insert(recs).execute()
+                        except Exception:
+                            pass
+                    self.executor.submit(_async_insert, self.url, self.key, records)
+            except Exception as e:
+                print(f"[SupabaseRepository Warning] Logging frame predictions failed: {e}")
+        return True
 
     def get_session_analytics(self, session_id: str) -> Optional[Dict[str, Any]]:
-        if not self.client:
-            return self.fallback_repo.get_session_analytics(session_id)
+        return self.fallback_repo.get_session_analytics(session_id)
 
-        sess_res = self.client.table("sessions").select("*").eq("id", session_id).execute()
-        if not sess_res.data:
-            return None
-        sess = sess_res.data[0]
-
-        preds_res = self.client.table("predictions").select("person_id, expression, confidence").eq("session_id", session_id).execute()
-        preds = preds_res.data or []
-
-        if not preds:
-            return {
-                "session_id": session_id,
-                "total_people_detected": 0,
-                "total_predictions": 0,
-                "expression_distribution": {},
-                "average_confidence": 0.0,
-                "dominant_expression": "None",
-                "session_duration_seconds": float(sess.get("duration", 0.0)),
-                "avg_fps": float(sess.get("avg_fps", 0.0)),
-                "persons": []
-            }
-
-        unique_pids = set(p["person_id"] for p in preds if p["person_id"] > 0)
-        emotions = [p["expression"] for p in preds if p.get("expression")]
-        confidences = [p["confidence"] for p in preds if p.get("confidence") is not None]
-        distribution = dict(Counter(emotions))
-        dominant_emo = max(distribution, key=distribution.get) if distribution else "Neutral"
-        avg_conf = float(sum(confidences) / len(confidences)) * 100 if confidences else 0.0
-
-        return {
-            "session_id": session_id,
-            "total_people_detected": len(unique_pids),
-            "total_predictions": len(preds),
-            "expression_distribution": distribution,
-            "average_confidence": round(avg_conf, 1),
-            "dominant_expression": dominant_emo,
-            "session_duration_seconds": float(sess.get("duration", 0.0)),
-            "avg_fps": float(sess.get("avg_fps", 0.0)),
-            "persons": sorted(list(unique_pids))
-        }
+    def save_person_thumbnails(self, session_id: str, persons_details: List[Dict[str, Any]]) -> bool:
+        self.fallback_repo.save_person_thumbnails(session_id, persons_details)
+        if self.client:
+            def _async_save_thumbs():
+                try:
+                    self.client.table("sessions").update({"persons_details": persons_details}).eq("id", session_id).execute()
+                except Exception as e:
+                    pass
+            self.executor.submit(_async_save_thumbs)
+        return True
 
     def get_person_analytics(self, session_id: str, person_id: int) -> Optional[Dict[str, Any]]:
-        if not self.client:
-            return self.fallback_repo.get_person_analytics(session_id, person_id)
-
-        sess_res = self.client.table("sessions").select("id").eq("id", session_id).execute()
-        if not sess_res.data:
-            return None
-
-        preds_res = self.client.table("predictions")\
-                        .select("expression, confidence, frame_number")\
-                        .eq("session_id", session_id)\
-                        .eq("person_id", person_id)\
-                        .order("frame_number", desc=False)\
-                        .execute()
-        preds = preds_res.data or []
-        if not preds:
-            return None
-
-        emotions = [p["expression"] for p in preds if p.get("expression")]
-        confidences = [p["confidence"] for p in preds if p.get("confidence") is not None]
-        distribution = dict(Counter(emotions))
-        dominant_emo = max(distribution, key=distribution.get) if distribution else "Neutral"
-        avg_conf = float(sum(confidences) / len(confidences)) * 100 if confidences else 0.0
-
-        return {
-            "person_id": person_id,
-            "dominant_expression": dominant_emo,
-            "average_confidence": round(avg_conf, 1),
-            "expression_distribution": distribution,
-            "expression_timeline": emotions
-        }
+        return self.fallback_repo.get_person_analytics(session_id, person_id)
 
     def get_latest_frame_detections(self, session_id: str) -> Dict[str, Any]:
-        if not self.client:
-            return self.fallback_repo.get_latest_frame_detections(session_id)
-
-        sess_res = self.client.table("sessions").select("*").eq("id", session_id).execute()
-        if not sess_res.data:
-            return {}
-        sess = sess_res.data[0]
-
-        preds_res = self.client.table("predictions")\
-                        .select("frame_number")\
-                        .eq("session_id", session_id)\
-                        .order("frame_number", desc=True)\
-                        .limit(1)\
-                        .execute()
-        if not preds_res.data:
-            return {
-                "session_id": session_id,
-                "people_detected": 0,
-                "fps": float(sess.get("avg_fps", 0.0)),
-                "average_confidence": 0.0,
-                "dominant_expression": "None",
-                "people": []
-            }
-
-        latest_frame_num = preds_res.data[0]["frame_number"]
-        frame_preds = self.client.table("predictions")\
-                          .select("*")\
-                          .eq("session_id", session_id)\
-                          .eq("frame_number", latest_frame_num)\
-                          .execute().data or []
-
-        people_list = []
-        emotions = []
-        confidences = []
-        for p in frame_preds:
-            emotions.append(p.get("expression", "Neutral"))
-            confidences.append(float(p.get("confidence", 0.0)))
-            people_list.append({
-                "person_id": p["person_id"],
-                "expression": p.get("expression", "Neutral"),
-                "confidence": round(float(p.get("confidence", 0.0)), 2),
-                "bounding_box": {
-                    "x": p["x"],
-                    "y": p["y"],
-                    "width": p["width"],
-                    "height": p["height"]
-                }
-            })
-
-        counts = Counter(emotions) if emotions else {}
-        dom_emo = counts.most_common(1)[0][0] if counts else "None"
-        avg_conf = float(sum(confidences) / len(confidences)) * 100 if confidences else 0.0
-
-        return {
-            "session_id": session_id,
-            "people_detected": len(people_list),
-            "fps": float(sess.get("avg_fps", 30.0)),
-            "average_confidence": round(avg_conf, 1),
-            "dominant_expression": dom_emo,
-            "people": people_list
-        }
+        return self.fallback_repo.get_latest_frame_detections(session_id)
 
     def list_sessions(self, page: int = 1, limit: int = 10) -> Dict[str, Any]:
-        if not self.client:
-            return self.fallback_repo.list_sessions(page, limit)
-
-        count_res = self.client.table("sessions").select("id", count="exact").execute()
-        total = count_res.count if count_res.count is not None else len(count_res.data)
-
-        offset = (page - 1) * limit
-        sess_res = self.client.table("sessions")\
-                       .select("*")\
-                       .order("started_at", desc=True)\
-                       .range(offset, offset + limit - 1)\
-                       .execute()
-        sessions_list = []
-        for s in sess_res.data or []:
-            start_iso = s.get("started_at", "")
-            date_str = start_iso[:10] if start_iso else ""
-            sessions_list.append({
-                "session_id": s["id"],
-                "session_name": s.get("session_name") or "Session",
-                "date": date_str,
-                "duration_seconds": float(s.get("duration") or 0.0),
-                "people_count": int(s.get("people_count") or 0),
-                "dominant_expression": s.get("dominant_expression") or "Neutral",
-                "average_confidence": round(float(s.get("average_confidence") or 0.0) * 100, 1),
-                "status": s.get("status") or "completed"
-            })
-
-        return {
-            "total": total,
-            "page": page,
-            "limit": limit,
-            "sessions": sessions_list
-        }
+        return self.fallback_repo.list_sessions(page, limit)
 
 
 # -------------------------------------------------------------------------

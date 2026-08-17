@@ -1,6 +1,6 @@
 """
 Face Detector Wrapper Service using OpenCV YuNet DNN / SCRFD ONNX Models.
-Detects N faces with 5 facial keypoints for 112x112 geometric alignment.
+Detects N faces (including small/background faces) with 5 facial keypoints for 112x112 geometric alignment.
 """
 import cv2
 import numpy as np
@@ -14,8 +14,9 @@ from app.services.face_aligner import FaceAligner
 class FaceDetector:
     """
     Wrapper for OpenCV YuNet / SCRFD face detector and 5-point facial keypoint aligner.
+    Uses score_threshold=0.20 to catch background and partially occluded faces.
     """
-    def __init__(self, score_threshold: float = 0.40, nms_threshold: float = 0.30):
+    def __init__(self, score_threshold: float = 0.20, nms_threshold: float = 0.30):
         self.score_threshold = score_threshold
         self.nms_threshold = nms_threshold
         self.aligner = FaceAligner(target_size=(112, 112))
@@ -68,7 +69,7 @@ class FaceDetector:
                         continue
                         
                     # Extract 5 keypoints: [left_eye, right_eye, nose, left_mouth, right_mouth]
-                    # Note: YuNet outputs: right_eye(4:6), left_eye(6:8), nose(8:10), right_mouth(10:12), left_mouth(12:14)
+                    # YuNet outputs: right_eye(4:6), left_eye(6:8), nose(8:10), right_mouth(10:12), left_mouth(12:14)
                     r_eye = face[4:6]
                     l_eye = face[6:8]
                     nose = face[8:10]

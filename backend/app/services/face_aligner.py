@@ -6,7 +6,6 @@ Ensures standardized face crops with eyes aligned horizontally.
 """
 import cv2
 import numpy as np
-import torch
 from typing import Tuple, Optional
 
 # Standard 5-point landmark template for 112x112 face crop (InsightFace / OpenCV FER standard)
@@ -45,41 +44,29 @@ class FaceAligner:
         if frame is None or frame.size == 0:
             return np.zeros((*self.target_size, 3), dtype=np.uint8)
 
-        if kps is not None and len(kps) == 5:
-            src_pts = kps.astype(np.float32)
-            dst_pts = STANDARD_FACIAL_5KPS_112.copy()
-            
-            # Estimate partial affine matrix (rotation, uniform scale, translation)
-            M, _ = cv2.estimateAffinePartial2D(src_pts, dst_pts, method=cv2.LMEDS)
-            
-            if M is not None:
-                aligned_chip = cv2.warpAffine(
-                    frame,
-                    M,
-                    self.target_size,
-                    flags=cv2.INTER_CUBIC,
-                    borderMode=cv2.BORDER_REFLECT
-                )
-                return aligned_chip
+        h_frame, w_frame = frame.shape[:2]
 
-        # Fallback to standard bounding box crop if keypoints are unavailable
+        # Use generous face bounding box crop to capture eyes, nose, mouth, and chin fully
         if bbox is not None:
             x, y, w, h = bbox
-            h_frame, w_frame = frame.shape[:2]
-            x1 = max(0, x)
-            y1 = max(0, y)
-            x2 = min(w_frame, x + w)
-            y2 = min(h_frame, y + h)
+            pad_w = int(w * 0.20)
+            pad_h_top = int(h * 0.15)
+            pad_h_bottom = int(h * 0.35)
+            x1 = max(0, x - pad_w)
+            y1 = max(0, y - pad_h_top)
+            x2 = min(w_frame, x + w + pad_w)
+            y2 = min(h_frame, y + h + pad_h_bottom)
             chip = frame[y1:y2, x1:x2]
             if chip.size > 0:
                 return cv2.resize(chip, self.target_size)
-                
+
         return np.zeros((*self.target_size, 3), dtype=np.uint8)
 
     def preprocess_aligned_face(self, aligned_chip: np.ndarray) -> np.ndarray:
         """
         Standardized face preprocessing for OpenCV MobileFaceNet FER ONNX inference:
-        Input shape: (1, 3, 112, 112) BGR float array.
+        Scale=1.0/128.0, Mean=(127.5, 127.5, 127.5), SwapRB=True (RGB format).
+        Input shape: (1, 3, 112, 112) normalized float blob.
         """
         if aligned_chip is None or aligned_chip.size == 0:
             aligned_chip = np.zeros((*self.target_size, 3), dtype=np.uint8)
@@ -87,6 +74,12 @@ class FaceAligner:
         if aligned_chip.shape[:2] != self.target_size:
             aligned_chip = cv2.resize(aligned_chip, self.target_size)
             
-        # Blob from BGR image: (1, 3, 112, 112)
-        blob = cv2.dnn.blobFromImage(aligned_chip, 1.0, self.target_size, (0.0, 0.0, 0.0), swapRB=False)
+        # Normalized MobileFaceNet blob: (1, 3, 112, 112)
+        blob = cv2.dnn.blobFromImage(
+            aligned_chip,
+            1.0 / 128.0,
+            self.target_size,
+            (127.5, 127.5, 127.5),
+            swapRB=True
+        )
         return blob

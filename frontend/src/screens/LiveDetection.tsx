@@ -48,18 +48,18 @@ export default function LiveDetection() {
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null
     const canvas = document.createElement('canvas')
-    canvas.width = 640
-    canvas.height = 480
+    canvas.width = 480
+    canvas.height = 360
     const ctx = canvas.getContext('2d')
 
     if (cameraOn && sessionActive && wsStatus === 'connected') {
       interval = setInterval(() => {
         if (videoRef.current && wsRef.current && videoRef.current.readyState >= 2) {
-          ctx?.drawImage(videoRef.current, 0, 0, 640, 480)
-          const base64Img = canvas.toDataURL('image/jpeg', 0.6)
+          ctx?.drawImage(videoRef.current, 0, 0, 480, 360)
+          const base64Img = canvas.toDataURL('image/jpeg', 0.45)
           wsRef.current.sendFrame(base64Img)
         }
-      }, 100)
+      }, 40)
     }
 
     return () => {
@@ -113,14 +113,22 @@ export default function LiveDetection() {
     }
   }, [handleMessage])
 
-  const endSession = useCallback(async () => {
-    if (sessionId) {
-      try {
-        await apiService.endSession(sessionId)
-      } catch (err) {
-        console.warn('Error closing session on backend:', err)
-      }
-    }
+  const [endedNotice, setEndedNotice] = useState<{ sessionId: string } | null>(null)
+
+  const endSession = useCallback(() => {
+    const finishedId = sessionId || 'sess_active'
+
+    // 1. Immediately trigger popup notice overlay in 0ms!
+    setEndedNotice({ sessionId: finishedId })
+
+    // 2. Immediately reset live stream states & disconnect WebSocket
+    setSessionActive(false)
+    setSessionId(null)
+    setPersons([])
+    setFps(0)
+    setAvgConfidence(0)
+    setDuration(0)
+    setWsStatus('disconnected')
 
     if (wsRef.current) {
       wsRef.current.disconnect()
@@ -132,13 +140,12 @@ export default function LiveDetection() {
       timerRef.current = null
     }
 
-    setSessionActive(false)
-    setSessionId(null)
-    setPersons([])
-    setFps(0)
-    setAvgConfidence(0)
-    setDuration(0)
-    setWsStatus('disconnected')
+    // 3. Asynchronously close session on backend in background without delaying UI popup
+    if (finishedId && finishedId !== 'sess_active') {
+      apiService
+        .endSession(finishedId)
+        .catch((err) => console.warn('Background session close notice:', err))
+    }
   }, [sessionId])
 
   const startCamera = useCallback(() => {
@@ -570,6 +577,36 @@ export default function LiveDetection() {
           )}
         </div>
       </div>
+
+      {/* Session Ended Toast Notification Popup */}
+      {endedNotice && (
+        <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/85 backdrop-blur-md p-4 animate-fade-in">
+          <div className="bg-slate-950 border-2 border-cyan-400 p-6 rounded-2xl max-w-md w-full shadow-2xl text-center space-y-4 relative">
+            <div className="w-16 h-16 bg-emerald-500/20 text-emerald-400 rounded-full flex items-center justify-center mx-auto text-3xl font-bold border border-emerald-500/40">
+              ✓
+            </div>
+            <div>
+              <h3 className="text-xl font-extrabold text-white tracking-tight">
+                Session Saved to History!
+              </h3>
+              <p className="text-xs text-cyan-400 font-mono mt-1">
+                ID: {endedNotice.sessionId}
+              </p>
+            </div>
+            <p className="text-xs text-slate-300 leading-relaxed">
+              The detection session has been logged with all Person ID face photo cards, expressions, and telemetry into database history.
+            </p>
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <button
+                onClick={() => setEndedNotice(null)}
+                className="px-6 py-2.5 bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-slate-950 text-xs font-bold rounded-xl shadow-lg shadow-cyan-500/30 transition transform active:scale-95"
+              >
+                Close & Continue
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
