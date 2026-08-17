@@ -22,7 +22,7 @@ def run_cv_benchmark(num_warmup: int = 5, num_runs: int = 20):
 
     # Initialize CV components
     detector = SCRFDDetector()
-    aligner = FaceAligner(target_size=(112, 112))
+    aligner = FaceAligner(target_size=(224, 224))
     classifier = EmotionClassifier()
 
     # Generate synthetic camera frame (640x480)
@@ -32,7 +32,7 @@ def run_cv_benchmark(num_warmup: int = 5, num_runs: int = 20):
     print("\nRunning initial component warmup...")
     for _ in range(num_warmup):
         _ = detector.detect_faces(frame)
-        _ = classifier.predict_face(np.full((112, 112, 3), 100, dtype=np.uint8))
+        _ = classifier.predict_face(np.full((224, 224, 3), 100, dtype=np.uint8))
 
     # Benchmark SCRFD Detection
     det_latencies = []

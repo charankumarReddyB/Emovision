@@ -64,9 +64,8 @@ class FaceAligner:
 
     def preprocess_aligned_face(self, aligned_chip: np.ndarray) -> np.ndarray:
         """
-        Standardized face preprocessing for OpenCV MobileFaceNet FER ONNX inference:
+        Standardized face preprocessing for ONNX models:
         Scale=1.0/128.0, Mean=(127.5, 127.5, 127.5), SwapRB=True (RGB format).
-        Input shape: (1, 3, 112, 112) normalized float blob.
         """
         if aligned_chip is None or aligned_chip.size == 0:
             aligned_chip = np.zeros((*self.target_size, 3), dtype=np.uint8)
@@ -74,7 +73,6 @@ class FaceAligner:
         if aligned_chip.shape[:2] != self.target_size:
             aligned_chip = cv2.resize(aligned_chip, self.target_size)
             
-        # Normalized MobileFaceNet blob: (1, 3, 112, 112)
         blob = cv2.dnn.blobFromImage(
             aligned_chip,
             1.0 / 128.0,
@@ -83,3 +81,29 @@ class FaceAligner:
             swapRB=True
         )
         return blob
+
+    def preprocess_aligned_face_pytorch(self, aligned_chip: np.ndarray) -> np.ndarray:
+        """
+        Official DAN ImageNet RGB Preprocessing:
+        Target Size: (224, 224, 3) RGB
+        ImageNet Normalization: Mean [0.485, 0.456, 0.406], Std [0.229, 0.224, 0.225]
+        Returns: (3, 224, 224) float32 numpy array
+        """
+        if aligned_chip is None or aligned_chip.size == 0:
+            aligned_chip = np.zeros((224, 224, 3), dtype=np.uint8)
+
+        # Convert BGR to RGB and resize to 224x224
+        rgb_chip = cv2.cvtColor(aligned_chip, cv2.COLOR_BGR2RGB)
+        if rgb_chip.shape[:2] != (224, 224):
+            rgb_chip = cv2.resize(rgb_chip, (224, 224))
+
+        # Normalize pixel range [0, 1]
+        img = rgb_chip.astype(np.float32) / 255.0
+
+        # ImageNet normalization
+        mean = np.array([0.485, 0.456, 0.406], dtype=np.float32)
+        std = np.array([0.229, 0.224, 0.225], dtype=np.float32)
+        img = (img - mean) / std
+
+        # HWC -> CHW (3, 224, 224)
+        return np.transpose(img, (2, 0, 1))

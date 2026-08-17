@@ -30,10 +30,25 @@ class Settings(BaseModel):
     SUPABASE_KEY: str = Field(default_factory=lambda: os.getenv("SUPABASE_KEY", ""))
     DATABASE_URL: str = Field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
     DATABASE_PATH: Path = DATA_DIR_PATH / "emovision.db"
-    # Root Models Directory & Colab Integration Contract
+    # Root Models Directory & Model Integration Contract
     ROOT_MODELS_DIR: Path = BASE_DIR.parent / "models"
-    EMOTION_MODEL_NAME: str = "emotion_model.onnx"
-    FALLBACK_MODEL_NAME: str = "facial_expression_recognition_mobilefacenet_2022july.onnx"
+    EMOTION_MODEL_NAME: str = "dan_rafdb.pth"
+    ONNX_MODEL_NAME: str = "emotion_model.onnx"
+    
+    # Face Preprocessing Settings
+    TARGET_FACE_SIZE: tuple[int, int] = (224, 224)
+    COLOR_MODE: str = "rgb"
+    
+    # Official DAN RAF-DB Emotion Classes (Label Order: 0->Surprise, 1->Fear, 2->Disgust, 3->Happy, 4->Sad, 5->Angry, 6->Neutral)
+    EMOTION_CLASSES: list[str] = [
+        "Surprise",
+        "Fear",
+        "Disgust",
+        "Happy",
+        "Sad",
+        "Angry",
+        "Neutral"
+    ]
     
     # Emotion Confidence Threshold (display 'Uncertain' if confidence < 0.50)
     CONFIDENCE_THRESHOLD: float = Field(default_factory=lambda: float(os.getenv("CONFIDENCE_THRESHOLD", "0.50")))

@@ -14,12 +14,12 @@ from typing import Tuple, Optional, Dict, List
 from app.core.config import settings
 
 LABEL_MAP = {
-    0: "Angry",
-    1: "Disgust",
-    2: "Fear",
+    0: "Surprise",
+    1: "Fear",
+    2: "Disgust",
     3: "Happy",
     4: "Sad",
-    5: "Surprise",
+    5: "Angry",
     6: "Neutral"
 }
 

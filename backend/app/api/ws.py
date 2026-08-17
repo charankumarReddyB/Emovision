@@ -62,6 +62,7 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
             
             h, w = frame.shape[:2]
             people_list = []
+            faces_list = []
             
             for det in classified_detections:
                 bx, by, bw, bh = det["bbox"]
@@ -69,11 +70,17 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
                 conf = float(det["emotion_confidence"])
                 f_idx = int(det["face_index"])
 
+                faces_list.append({
+                    "bbox": [int(bx), int(by), int(bw), int(bh)],
+                    "expression": emo,
+                    "confidence": round(conf, 4)
+                })
+
                 people_list.append({
                     "face_index": f_idx,
                     "person_id": f_idx,
                     "expression": emo,
-                    "confidence": round(conf, 2),
+                    "confidence": round(conf, 4),
                     "bounding_box": {
                         "x": int(bx),
                         "y": int(by),
@@ -86,10 +93,12 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
 
             payload = {
                 "session_id": session_id,
-                "people_detected": len(people_list),
+                "face_count": len(faces_list),
+                "people_detected": len(faces_list),
                 "fps": round(float(live_stats.get("fps", 30.0)), 1),
                 "average_confidence": round(float(live_stats.get("average_confidence", 0.0)), 1),
-                "dominant_expression": str(live_stats.get("dominant_expression", "No face detected" if len(people_list) == 0 else "Neutral")),
+                "dominant_expression": str(live_stats.get("dominant_expression", "No face detected" if len(faces_list) == 0 else "Neutral")),
+                "faces": faces_list,
                 "people": people_list
             }
 
