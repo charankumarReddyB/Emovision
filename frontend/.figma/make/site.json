@@ -1,5 +1,6 @@
 {
-  "description": "Streamline project management with intuitive task tracking and collaboration tools designed for teams to enhance productivity and communication.",
+  "title": "EmoVision — Real-Time Emotion Intelligence Platform",
+  "description": "EmoVision is a state-of-the-art AI platform for real-time multi-face emotion recognition and facial expression analysis.",
   "robots": {
     "index": false
   },
