@@ -41,26 +41,11 @@ class FaceAligner:
 
         h_frame, w_frame = frame.shape[:2]
 
-        # 1. Primary path: 5-point geometric affine transformation matrix estimate
-        if kps is not None and isinstance(kps, np.ndarray) and kps.shape == (5, 2):
-            try:
-                src_pts = kps.astype(np.float32)
-                dst_pts = self.reference_template.astype(np.float32)
-                
-                # Estimate 2D Similarity Affine Transform (rotation, translation, scale)
-                M, _ = cv2.estimateAffinePartial2D(src_pts, dst_pts)
-                if M is not None:
-                    aligned = cv2.warpAffine(frame, M, self.target_size, flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0))
-                    if aligned is not None and aligned.size > 0:
-                        return aligned
-            except Exception as err:
-                print(f"[FaceAligner Warning] 5-point affine alignment fallback: {err}")
-
-        # 2. Fallback path: Tight bounding box crop centered on face (no neck/chest distortion)
+        # Primary path: Full face bounding box crop preserving complete face (forehead, eyes, nose, mouth, chin)
         if bbox is not None:
             x, y, w, h = bbox
-            pad_w = int(w * 0.05)
-            pad_h = int(h * 0.05)
+            pad_w = int(w * 0.15)
+            pad_h = int(h * 0.15)
             x1 = max(0, x - pad_w)
             y1 = max(0, y - pad_h)
             x2 = min(w_frame, x + w + pad_w)
@@ -68,6 +53,19 @@ class FaceAligner:
             chip = frame[y1:y2, x1:x2]
             if chip.size > 0:
                 return cv2.resize(chip, self.target_size)
+
+        # Fallback path: 5-point similarity affine transform if bbox not provided
+        if kps is not None and isinstance(kps, np.ndarray) and kps.shape == (5, 2):
+            try:
+                src_pts = kps.astype(np.float32)
+                dst_pts = self.reference_template.astype(np.float32)
+                M, _ = cv2.estimateAffinePartial2D(src_pts, dst_pts)
+                if M is not None:
+                    aligned = cv2.warpAffine(frame, M, self.target_size, flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0))
+                    if aligned is not None and aligned.size > 0:
+                        return aligned
+            except Exception as err:
+                print(f"[FaceAligner Warning] 5-point affine alignment fallback: {err}")
 
         return np.zeros((*self.target_size, 3), dtype=np.uint8)
 

@@ -56,8 +56,8 @@ class RealtimePipeline:
         
         # 3. Batch emotion classification for N faces
         if aligned_chips:
-            kps_list = [det.get("kps") for det in raw_detections]
-            emotions_list = self.classifier.classify_batch(aligned_chips, kps_list=kps_list)
+            bboxes = [det["bbox"] for det in raw_detections]
+            emotions_list = self.classifier.classify_batch(aligned_chips, bboxes=bboxes)
         else:
             emotions_list = []
             
