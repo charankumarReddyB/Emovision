@@ -69,13 +69,29 @@ class DatabaseRepository(ABC):
 _person_thumbnails_store: Dict[str, List[Dict[str, Any]]] = {}
 
 
+def _infer_source_type(session_id: str, raw_source: Optional[str] = None) -> str:
+    if raw_source and str(raw_source).strip() and str(raw_source).strip() != "None":
+        return str(raw_source).strip()
+    if session_id.startswith("vid_"):
+        return "video"
+    if session_id.startswith("img_"):
+        return "image"
+    return "webcam"
+
+
 # -------------------------------------------------------------------------
 # Local SQLite Repository Implementation
 # -------------------------------------------------------------------------
 class SqliteRepository(DatabaseRepository):
     def __init__(self, db_path: str = None):
-        path = db_path or str(settings.DATABASE_PATH)
-        self.engine = create_engine(f"sqlite:///{path}", connect_args={"check_same_thread": False})
+        if db_path is None:
+            backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+            data_dir = os.path.join(backend_dir, "data")
+            os.makedirs(data_dir, exist_ok=True)
+            db_path = os.path.join(data_dir, "emovision.db")
+
+        self.db_path = db_path
+        self.engine = create_engine(f"sqlite:///{self.db_path}", connect_args={"check_same_thread": False})
         self.SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=self.engine)
         Base.metadata.create_all(bind=self.engine)
 
@@ -92,7 +108,7 @@ class SqliteRepository(DatabaseRepository):
                 return {
                     "session_id": existing.session_id,
                     "session_name": existing.session_name,
-                    "source_type": existing.source_type,
+                    "source_type": _infer_source_type(existing.session_id, existing.source_type),
                     "start_time": existing.start_time.isoformat() if existing.start_time else "",
                     "status": existing.status
                 }
@@ -110,7 +126,7 @@ class SqliteRepository(DatabaseRepository):
             return {
                 "session_id": sess.session_id,
                 "session_name": sess.session_name,
-                "source_type": sess.source_type,
+                "source_type": _infer_source_type(sess.session_id, sess.source_type),
                 "start_time": sess.start_time.isoformat() if sess.start_time else "",
                 "status": sess.status
             }
@@ -365,6 +381,7 @@ class SqliteRepository(DatabaseRepository):
                 sessions_list.append({
                     "session_id": s.session_id,
                     "session_name": s.session_name or "Session",
+                    "source_type": _infer_source_type(s.session_id, s.source_type),
                     "date": s.start_time.strftime("%Y-%m-%d %H:%M") if s.start_time else "",
                     "duration_seconds": s.duration or 0.0,
                     "people_count": s.total_people_detected or 0,
@@ -499,6 +516,34 @@ class SupabaseRepository(DatabaseRepository):
         return self.fallback_repo.get_latest_frame_detections(session_id)
 
     def list_sessions(self, page: int = 1, limit: int = 10) -> Dict[str, Any]:
+        if self.client:
+            try:
+                offset = (page - 1) * limit
+                res = self.client.table("sessions").select("*", count="exact").order("started_at", desc=True).range(offset, offset + limit - 1).execute()
+                total = res.count or (len(res.data) if res.data else 0)
+                sessions_list = []
+                if res.data:
+                    for s in res.data:
+                        sessions_list.append({
+                            "session_id": s.get("id"),
+                            "session_name": s.get("session_name", "Session"),
+                            "source_type": _infer_source_type(s.get("id", ""), s.get("source_type")),
+                            "date": s.get("started_at", "")[:16].replace("T", " ") if s.get("started_at") else "",
+                            "duration_seconds": s.get("duration", 0.0),
+                            "people_count": s.get("people_count", 0),
+                            "dominant_expression": s.get("dominant_expression") or "Neutral",
+                            "average_confidence": round(float(s.get("avg_confidence", 0.0) or 0.0) * 100, 1),
+                            "status": s.get("status", "completed"),
+                            "persons_details": s.get("persons_details", [])
+                        })
+                return {
+                    "total": total,
+                    "page": page,
+                    "limit": limit,
+                    "sessions": sessions_list
+                }
+            except Exception as err:
+                print(f"[Supabase List Warning] {err}")
         return self.fallback_repo.list_sessions(page, limit)
 
 

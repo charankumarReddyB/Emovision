@@ -8,6 +8,7 @@ import sys
 import io
 import cv2
 import numpy as np
+import time
 from pathlib import Path
 from fastapi.testclient import TestClient
 
@@ -84,9 +85,24 @@ def run_upload_analysis_tests():
     if vid_path.exists():
         vid_path.unlink()
 
-    passed = (res.status_code == 200 and res.json().get("success") is True and res.json().get("total_face_detections", 0) > 0)
-    results.append(("Video (Multi-Face)", "PASS" if passed else "FAIL", f"Status {res.status_code}, Detections: {res.json().get('total_face_detections')}"))
-    print(f"  • Video (Multi-Face)   -> {'PASS' if passed else 'FAIL'} | Duration: {res.json().get('video_duration_seconds')}s, Detections: {res.json().get('total_face_detections')}")
+    job_data = res.json()
+    aid = job_data.get("analysis_id")
+    
+    # Poll status until completed
+    final_res = None
+    if aid:
+        for _ in range(20):
+            time.sleep(0.5)
+            st = client.get(f"/api/analyze/video/{aid}/status").json()
+            if st.get("status") == "completed":
+                final_res = client.get(f"/api/analyze/video/{aid}/result").json()
+                break
+
+    passed = (res.status_code == 200 and final_res is not None and final_res.get("success") is True and final_res.get("total_face_detections", 0) > 0)
+    det_count = final_res.get("total_face_detections") if final_res else None
+    dur_sec = final_res.get("video_duration_seconds") if final_res else None
+    results.append(("Video (Multi-Face)", "PASS" if passed else "FAIL", f"Status {res.status_code}, Detections: {det_count}"))
+    print(f"  • Video (Multi-Face)   -> {'PASS' if passed else 'FAIL'} | Duration: {dur_sec}s, Detections: {det_count}")
 
     print("\n" + "=" * 80)
     print("UPLOAD ANALYSIS API TEST SUMMARY")

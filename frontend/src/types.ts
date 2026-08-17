@@ -35,6 +35,7 @@ export interface DetectionPayload {
 export interface SessionSummary {
   session_id: string
   session_name: string
+  source_type?: 'webcam' | 'image' | 'video'
   date: string
   duration_seconds: number
   people_count: number

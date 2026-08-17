@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, AreaChart, Area, XAxis, YAxis } from 'recharts'
 import { EMOTION_COLORS, EMOTION_ICONS } from '../data'
 
@@ -28,13 +28,101 @@ interface VideoAnalysisResult {
   timeline?: VideoTimelinePoint[]
 }
 
+const STORAGE_KEY = 'emovision_active_video_id'
+
 export default function VideoUploadAnalysis() {
   const [selectedFile, setSelectedFile] = useState<File | null>(null)
   const [previewUrl, setPreviewUrl] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
   const [progress, setProgress] = useState(0)
+  const [progressText, setProgressText] = useState('Initializing...')
   const [result, setResult] = useState<VideoAnalysisResult | null>(null)
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [activeAnalysisId, setActiveAnalysisId] = useState<string | null>(null)
+
+  const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  const stopPolling = () => {
+    if (pollIntervalRef.current) {
+      clearInterval(pollIntervalRef.current)
+      pollIntervalRef.current = null
+    }
+  }
+
+  // Poll video status from backend
+  const startPollingStatus = (analysisId: string) => {
+    stopPolling()
+    setLoading(true)
+    setActiveAnalysisId(analysisId)
+    localStorage.setItem(STORAGE_KEY, analysisId)
+
+    pollIntervalRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`http://127.0.0.1:8000/api/analyze/video/${analysisId}/status`)
+        if (!res.ok) {
+          stopPolling()
+          setLoading(false)
+          return
+        }
+
+        const statusData = await res.json()
+        const prog = statusData.progress || 0
+        setProgress(prog)
+        setProgressText(`Analyzing video frames (${statusData.frames_processed || 0} / ${statusData.total_frames_to_process || '?'}) — ${prog}%`)
+
+        if (statusData.status === 'completed') {
+          stopPolling()
+          fetchFinalResult(analysisId)
+        } else if (statusData.status === 'failed') {
+          stopPolling()
+          setLoading(false)
+          setErrorMsg(statusData.error_message || 'Video analysis failed')
+          localStorage.removeItem(STORAGE_KEY)
+        }
+      } catch (err) {
+        console.warn('Status poll error:', err)
+      }
+    }, 1000)
+  }
+
+  const fetchFinalResult = async (analysisId: string) => {
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/api/analyze/video/${analysisId}/result`)
+      if (res.ok) {
+        const resData = await res.json()
+        setResult(resData)
+        if (!resData.success && resData.message) {
+          setErrorMsg(resData.message)
+        }
+      }
+    } catch (err: any) {
+      setErrorMsg(err.message || 'Could not fetch final video results')
+    } finally {
+      setLoading(false)
+      setProgress(100)
+    }
+  }
+
+  // Check on mount if there is an active running or recently finished video job
+  useEffect(() => {
+    const savedId = localStorage.getItem(STORAGE_KEY)
+    if (savedId) {
+      setActiveAnalysisId(savedId)
+      startPollingStatus(savedId)
+    } else {
+      // Query backend for active running video job
+      fetch('http://127.0.0.1:8000/api/analyze/video/active')
+        .then((r) => r.json())
+        .then((data) => {
+          if (data.active_job && data.analysis_id) {
+            startPollingStatus(data.analysis_id)
+          }
+        })
+        .catch(() => {})
+    }
+
+    return () => stopPolling()
+  }, [])
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
@@ -60,41 +148,32 @@ export default function VideoUploadAnalysis() {
   const handleAnalyze = async () => {
     if (!selectedFile) return
     setLoading(true)
-    setProgress(10)
+    setProgress(5)
+    setProgressText('Uploading video to backend...')
     setErrorMsg(null)
+    setResult(null)
 
     try {
       const formData = new FormData()
       formData.append('file', selectedFile)
-
-      // Progress animation simulation
-      const interval = setInterval(() => {
-        setProgress((prev) => (prev < 90 ? prev + 8 : prev))
-      }, 500)
 
       const response = await fetch('http://127.0.0.1:8000/api/analyze/video', {
         method: 'POST',
         body: formData,
       })
 
-      clearInterval(interval)
-      setProgress(100)
-
       const data = await response.json()
 
       if (!response.ok) {
-        throw new Error(data.detail || 'Video analysis failed')
+        throw new Error(data.detail || 'Failed to submit video analysis')
       }
 
-      setResult(data)
-      if (!data.success && data.message) {
-        setErrorMsg(data.message)
+      if (data.analysis_id) {
+        startPollingStatus(data.analysis_id)
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Error analyzing video')
-    } finally {
+      setErrorMsg(err.message || 'Error uploading video')
       setLoading(false)
-      setProgress(0)
     }
   }
 
@@ -115,7 +194,7 @@ export default function VideoUploadAnalysis() {
 
   return (
     <div className="flex-1 flex flex-col overflow-y-auto p-6 space-y-6 animate-fade-in" style={{ background: '#070d19', color: '#f8fafc' }}>
-      {/* Top Header Card */}
+      {/* Top Control Bar */}
       <div
         className="p-6 rounded-2xl border flex flex-col md:flex-row items-center justify-between gap-6"
         style={{
@@ -130,7 +209,7 @@ export default function VideoUploadAnalysis() {
             Video Frame-by-Frame Emotion Analysis
           </h2>
           <p className="text-sm text-slate-400">
-            Upload a video (MP4, AVI, MOV, WEBM). Emovision samples frames and runs single-pass EfficientFace batching.
+            Upload a video (MP4, AVI, MOV, WEBM). Processing runs independently in backend — tab navigation will NOT cancel the job!
           </p>
         </div>
 
@@ -166,7 +245,7 @@ export default function VideoUploadAnalysis() {
             {loading ? (
               <span className="flex items-center gap-2">
                 <span className="w-4 h-4 border-2 border-slate-900 border-t-transparent rounded-full animate-spin" />
-                Processing Video...
+                Processing Video ({progress}%)...
               </span>
             ) : (
               'Analyze Video'
@@ -175,17 +254,26 @@ export default function VideoUploadAnalysis() {
         </div>
       </div>
 
-      {/* Progress Bar overlay when processing */}
+      {/* Real Progress Bar */}
       {loading && (
-        <div className="w-full bg-slate-900 rounded-full h-2 overflow-hidden border border-slate-800">
-          <div
-            className="bg-gradient-to-r from-cyan-400 to-blue-500 h-2 transition-all duration-300 rounded-full"
-            style={{ width: `${progress}%` }}
-          />
+        <div className="p-4 rounded-xl border bg-slate-900/90 border-cyan-500/30 space-y-2">
+          <div className="flex justify-between text-xs font-mono text-cyan-300">
+            <span>{progressText}</span>
+            <span>{progress}%</span>
+          </div>
+          <div className="w-full bg-slate-950 rounded-full h-3 overflow-hidden border border-slate-800">
+            <div
+              className="bg-gradient-to-r from-cyan-400 to-blue-500 h-3 transition-all duration-300 rounded-full"
+              style={{ width: `${progress}%` }}
+            />
+          </div>
+          <p className="text-[11px] text-slate-400">
+            ℹ️ You can freely switch tabs or check Dashboard / Session History while the background job processes.
+          </p>
         </div>
       )}
 
-      {/* Error Message Notice */}
+      {/* Error Notice */}
       {errorMsg && (
         <div
           className="p-4 rounded-xl border flex items-center justify-between text-sm"
@@ -204,8 +292,8 @@ export default function VideoUploadAnalysis() {
         </div>
       )}
 
-      {/* Drag & Drop or Video Layout */}
-      {!result && !previewUrl ? (
+      {/* Main Drag/Drop or Analysis Content */}
+      {!result && !previewUrl && !loading ? (
         <div
           onDragOver={(e) => e.preventDefault()}
           onDrop={handleDrop}
@@ -245,7 +333,7 @@ export default function VideoUploadAnalysis() {
               style={{ borderColor: 'rgba(255,255,255,0.08)' }}
             >
               <div className="text-xs font-mono text-slate-400 mb-3 w-full flex items-center justify-between border-b pb-2 border-slate-800">
-                <span>FILENAME: {selectedFile?.name}</span>
+                <span>FILENAME: {result?.filename || selectedFile?.name}</span>
                 {result && <span className="text-cyan-400 font-semibold">ANALYZED FRAMES: {result.total_frames_analyzed}</span>}
               </div>
 
@@ -401,9 +489,11 @@ export default function VideoUploadAnalysis() {
                 }}
               >
                 <div className="text-3xl mb-2">🎬</div>
-                <p className="text-sm font-medium">Ready for Video Analysis</p>
+                <p className="text-sm font-medium">{loading ? 'Processing Background Video Job...' : 'Ready for Video Analysis'}</p>
                 <p className="text-xs text-slate-500 max-w-xs mt-1">
-                  Click "Analyze Video" to process video frames asynchronously with EfficientFace batching.
+                  {loading
+                    ? 'Feel free to navigate to Dashboard or Session History — progress is tracked automatically.'
+                    : 'Click "Analyze Video" to process video frames asynchronously with EfficientFace batching.'}
                 </p>
               </div>
             )}

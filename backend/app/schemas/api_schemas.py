@@ -92,6 +92,7 @@ class PersonAnalyticsResponse(BaseModel):
 class SessionSummarySchema(BaseModel):
     session_id: str = Field(..., example="sess_a1b2c3")
     session_name: str = Field(..., example="Live Webcam Session")
+    source_type: Optional[str] = Field("webcam", example="webcam")
     date: str = Field(..., example="2026-08-14")
     duration_seconds: float = Field(..., example=120.0)
     people_count: int = Field(..., example=3)

@@ -387,57 +387,53 @@ export default function Dashboard({ onNavigate }: Props) {
               </button>
             </div>
             <div className="space-y-2">
-              {recentSessions.map((s) => (
-                <div
-                  key={s.session_id}
-                  className="flex items-center gap-4 px-3 py-2.5 rounded-lg"
-                  style={{ background: '#0a1120' }}
-                >
+              {recentSessions.map((s) => {
+                const sourceType = s.source_type || 'webcam'
+                const icon = sourceType === 'video' ? '🎥' : sourceType === 'image' ? '📷' : '📹'
+                return (
                   <div
-                    className="w-2 h-2 rounded-full"
-                    style={{
-                      background: EMOTION_COLORS[s.dominant_expression as Emotion] || '#00d4ff',
-                    }}
-                  />
-                  <div className="text-xs font-mono" style={{ color: '#64748b', width: 120 }}>
-                    {s.session_id}
+                    key={s.session_id}
+                    className="flex items-center gap-3 px-3.5 py-2.5 rounded-xl border border-slate-800/80 bg-slate-900/60 transition-all hover:border-cyan-500/30"
+                  >
+                    <span className="text-base">{icon}</span>
+                    <div className="flex flex-col">
+                      <div className="text-xs font-semibold text-slate-200">
+                        {s.session_name || s.session_id}
+                      </div>
+                      <div className="text-[11px] text-slate-400 font-mono">
+                        {sourceType.toUpperCase()} {s.date ? `· ${s.date}` : ''}
+                      </div>
+                    </div>
+                    {sourceType !== 'image' && (
+                      <div className="flex items-center gap-1 text-xs text-slate-400 font-mono ml-auto md:ml-4">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <circle cx="12" cy="12" r="10" />
+                          <polyline points="12 6 12 12 16 14" />
+                        </svg>
+                        {Math.round(s.duration_seconds)}s
+                      </div>
+                    )}
+                    <div className="text-xs text-slate-300 ml-auto md:ml-4 font-mono">
+                      {s.people_count} {s.people_count === 1 ? 'face' : 'faces'}
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="text-xs px-2.5 py-0.5 rounded-full font-medium"
+                        style={{
+                          background: `${EMOTION_COLORS[s.dominant_expression as Emotion] || '#00d4ff'}22`,
+                          color: EMOTION_COLORS[s.dominant_expression as Emotion] || '#00d4ff',
+                          border: `1px solid ${EMOTION_COLORS[s.dominant_expression as Emotion] || '#00d4ff'}44`,
+                        }}
+                      >
+                        {EMOTION_ICONS[s.dominant_expression as Emotion] || '😐'} {s.dominant_expression}
+                      </span>
+                      <span className="text-xs font-mono text-slate-400">
+                        {s.average_confidence}%
+                      </span>
+                    </div>
                   </div>
-                  <div className="text-xs" style={{ color: '#94a3b8' }}>
-                    {s.date}
-                  </div>
-                  <div className="flex items-center gap-1.5 text-xs" style={{ color: '#475569' }}>
-                    <svg
-                      width="12"
-                      height="12"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                    >
-                      <circle cx="12" cy="12" r="10" />
-                      <polyline points="12 6 12 12 16 14" />
-                    </svg>
-                    {Math.round(s.duration_seconds)}s
-                  </div>
-                  <div className="text-xs" style={{ color: '#94a3b8' }}>
-                    {s.people_count} people
-                  </div>
-                  <div className="ml-auto flex items-center gap-1.5">
-                    <span
-                      className="text-xs px-2 py-0.5 rounded"
-                      style={{
-                        background: `${EMOTION_COLORS[s.dominant_expression as Emotion] || '#00d4ff'}18`,
-                        color: EMOTION_COLORS[s.dominant_expression as Emotion] || '#00d4ff',
-                      }}
-                    >
-                      {s.dominant_expression}
-                    </span>
-                    <span className="text-xs font-mono" style={{ color: '#64748b' }}>
-                      {s.average_confidence}%
-                    </span>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           </div>
         </>

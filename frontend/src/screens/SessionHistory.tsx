@@ -45,14 +45,19 @@ export default function SessionHistory({ onNavigate }: Props) {
     fetchHistory()
   }, [fetchHistory])
 
-  // Filter sessions locally by search query and emotion
+  const [sourceFilter, setSourceFilter] = useState<string>('all')
+
+  // Filter sessions locally by search query, emotion, and source_type
   const filteredSessions = sessions.filter((s) => {
     const matchesSearch =
       s.session_id.toLowerCase().includes(searchQuery.toLowerCase()) ||
       (s.session_name && s.session_name.toLowerCase().includes(searchQuery.toLowerCase()))
     const matchesEmotion =
       emotionFilter === 'all' || s.dominant_expression === emotionFilter
-    return matchesSearch && matchesEmotion
+    const sType = s.source_type || 'webcam'
+    const matchesSource = sourceFilter === 'all' || sType === sourceFilter
+
+    return matchesSearch && matchesEmotion && matchesSource
   })
 
   const openDetailsModal = async (sessionId: string) => {
@@ -152,6 +157,50 @@ export default function SessionHistory({ onNavigate }: Props) {
           </svg>
         </div>
 
+        {/* Source Type Filter Tabs */}
+        <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-950 border border-slate-800">
+          <button
+            onClick={() => setSourceFilter('all')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              sourceFilter === 'all'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            All Sources
+          </button>
+          <button
+            onClick={() => setSourceFilter('webcam')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              sourceFilter === 'webcam'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            📹 Webcam
+          </button>
+          <button
+            onClick={() => setSourceFilter('image')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              sourceFilter === 'image'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            📷 Image
+          </button>
+          <button
+            onClick={() => setSourceFilter('video')}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${
+              sourceFilter === 'video'
+                ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            🎬 Video
+          </button>
+        </div>
+
         {/* Emotion Filter */}
         <div className="flex items-center gap-2">
           <label className="text-xs text-slate-400">Expression:</label>
@@ -206,7 +255,8 @@ export default function SessionHistory({ onNavigate }: Props) {
           <table className="w-full text-left border-collapse">
             <thead>
               <tr className="text-xs font-semibold uppercase tracking-wider bg-slate-950 text-slate-400 border-b border-cyan-500/10">
-                <th className="py-3 px-4">Session ID</th>
+                <th className="py-3 px-4">Session / Source</th>
+                <th className="py-3 px-4">Type</th>
                 <th className="py-3 px-4">Date</th>
                 <th className="py-3 px-4">Duration</th>
                 <th className="py-3 px-4">Person ID Photos & Expressions</th>
@@ -218,14 +268,25 @@ export default function SessionHistory({ onNavigate }: Props) {
             <tbody className="divide-y divide-cyan-500/5">
               {filteredSessions.map((s) => {
                 const domColor = EMOTION_COLORS[s.dominant_expression as Emotion] || '#00d4ff'
+                const sType = s.source_type || 'webcam'
+                const icon = sType === 'video' ? '🎥' : sType === 'image' ? '📷' : '📹'
                 return (
                   <tr key={s.session_id} className="hover:bg-slate-800/40 transition-colors text-xs">
                     <td className="py-3 px-4 font-mono font-medium text-cyan-400">
-                      {s.session_id}
+                      <div className="flex flex-col">
+                        <span className="font-semibold text-slate-200">{s.session_name || s.session_id}</span>
+                        <span className="text-[10px] text-slate-500">{s.session_id}</span>
+                      </div>
+                    </td>
+                    <td className="py-3 px-4">
+                      <span className="px-2 py-0.5 rounded bg-slate-800 text-cyan-300 font-mono text-[11px] border border-cyan-500/20 inline-flex items-center gap-1">
+                        <span>{icon}</span>
+                        <span>{sType.toUpperCase()}</span>
+                      </span>
                     </td>
                     <td className="py-3 px-4 text-slate-300">{s.date}</td>
                     <td className="py-3 px-4 text-slate-400 font-mono">
-                      {Math.round(s.duration_seconds)}s
+                      {sType === 'image' ? 'N/A' : `${Math.round(s.duration_seconds)}s`}
                     </td>
                     {/* Person Photos & Expressions Column */}
                     <td className="py-3 px-4">
