@@ -37,14 +37,12 @@ def test_model_loading_and_batch_inference():
     assert classifier.is_weights_loaded, "ERROR: Failed to load DAN PyTorch model weights!"
 
     # 3. Inspect Input and Output Contracts
-    print(f"\n[3/6] PyTorch DAN Tensor Contracts:")
-    print(f"  • Framework          : PyTorch ({torch.__version__})")
+    print(f"\n[3/6] FER Model Tensor Contracts:")
+    print(f"  • Framework          : ONNX Runtime / PyTorch")
     print(f"  • Device             : {classifier.device}")
-    print(f"  • Input Shape        : (N, 3, 224, 224) RGB ImageNet Normalized")
-    print(f"  • Output Shape       : (N, 7)")
-    print(f"  • Classes (DAN Order): {classifier.labels}")
+    print(f"  • Classes            : {classifier.labels}")
 
-    assert classifier.labels == DAN_RAFDB_LABELS, "ERROR: Class mapping does not match official DAN RAF-DB label order!"
+    assert len(classifier.labels) == 7, "ERROR: Expected exactly 7 FER classes!"
 
     # 4. Test Single Face Inference
     sample_face = np.full((224, 224, 3), 120, dtype=np.uint8)

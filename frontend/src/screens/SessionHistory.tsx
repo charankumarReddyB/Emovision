@@ -230,24 +230,24 @@ export default function SessionHistory({ onNavigate }: Props) {
                     {/* Person Photos & Expressions Column */}
                     <td className="py-3 px-4">
                       {s.persons_details && s.persons_details.length > 0 ? (
-                        <div className="flex items-center gap-2 overflow-x-auto py-1 max-w-[320px]">
+                        <div className="flex items-center gap-2.5 overflow-x-auto py-1 max-w-[420px] scrollbar-thin scrollbar-thumb-cyan-500/20">
                           {s.persons_details.map((p) => (
                             <div
                               key={p.person_id}
-                              className="flex items-center gap-1.5 bg-slate-950 border border-cyan-500/20 rounded-lg p-1 pr-2.5 flex-shrink-0 shadow-sm"
+                              className="flex items-center gap-2 bg-slate-950 border border-cyan-500/20 rounded-lg p-1.5 pr-3 flex-shrink-0 shadow-md min-w-[110px]"
                             >
                               {p.thumbnail_b64 ? (
                                 <img
                                   src={p.thumbnail_b64}
                                   alt={`Person ${p.person_id}`}
-                                  className="w-8 h-8 rounded-md object-cover border border-cyan-500/50"
+                                  className="w-10 h-10 rounded-md object-cover flex-shrink-0 border border-cyan-500/50"
                                 />
                               ) : (
-                                <div className="w-8 h-8 rounded-md bg-slate-800 flex items-center justify-center text-slate-400 border border-slate-700">
-                                  <User size={14} />
+                                <div className="w-10 h-10 rounded-md bg-slate-800 flex-shrink-0 flex items-center justify-center text-slate-400 border border-slate-700">
+                                  <User size={16} />
                                 </div>
                               )}
-                              <div className="flex flex-col text-[10px] leading-tight">
+                              <div className="flex flex-col text-[11px] leading-tight">
                                 <span className="font-mono font-bold text-cyan-400">#{p.person_id}</span>
                                 <span
                                   className="font-semibold mt-0.5"
@@ -269,7 +269,7 @@ export default function SessionHistory({ onNavigate }: Props) {
                     </td>
                     <td className="py-3 px-4">
                       <span
-                        className="px-2 py-0.5 rounded text-xs font-medium inline-flex items-center gap-1"
+                        className="px-2.5 py-1 rounded text-xs font-medium inline-flex items-center gap-1.5 shadow-sm"
                         style={{
                           background: `${domColor}18`,
                           color: domColor,
@@ -283,20 +283,22 @@ export default function SessionHistory({ onNavigate }: Props) {
                     <td className="py-3 px-4 text-slate-300 font-mono font-bold">
                       {s.average_confidence}%
                     </td>
-                    <td className="py-3 px-4 text-right space-x-2">
-                      <button
-                        onClick={() => openPdfReport(s.session_id)}
-                        className="px-2.5 py-1 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all inline-flex items-center gap-1"
-                      >
-                        <Printer size={12} />
-                        <span>PDF Report</span>
-                      </button>
-                      <button
-                        onClick={() => openDetailsModal(s.session_id)}
-                        className="px-2.5 py-1 rounded text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20 transition-all"
-                      >
-                        View Details
-                      </button>
+                    <td className="py-3 px-4 text-right">
+                      <div className="flex flex-col items-end gap-1.5">
+                        <button
+                          onClick={() => openPdfReport(s.session_id)}
+                          className="w-28 px-2.5 py-1 rounded text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 hover:bg-emerald-500/20 transition-all flex items-center justify-center gap-1.5 shadow-sm"
+                        >
+                          <Printer size={12} />
+                          <span>PDF Report</span>
+                        </button>
+                        <button
+                          onClick={() => openDetailsModal(s.session_id)}
+                          className="w-28 px-2.5 py-1 rounded text-xs font-medium bg-cyan-500/10 text-cyan-400 border border-cyan-500/30 hover:bg-cyan-500/20 transition-all text-center shadow-sm"
+                        >
+                          View Details
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 )

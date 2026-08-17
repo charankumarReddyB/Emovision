@@ -8,7 +8,7 @@ import cv2
 import numpy as np
 from typing import Tuple, Optional
 
-# Standard 5-point landmark template for 112x112 face crop (InsightFace / OpenCV FER standard)
+# Standard 5-point landmark template for 112x112 (InsightFace / OpenCV FER standard)
 STANDARD_FACIAL_5KPS_112 = np.array([
     [38.2946, 51.6963],  # Left Eye
     [73.5318, 51.5014],  # Right Eye
@@ -21,41 +21,50 @@ class FaceAligner:
     """
     Performs 5-point geometric face alignment and standard preprocessing.
     """
-    def __init__(self, target_size: Tuple[int, int] = (112, 112)):
+    def __init__(self, target_size: Tuple[int, int] = (224, 224)):
         self.target_size = target_size
+        scale = float(target_size[0]) / 112.0
+        self.reference_template = STANDARD_FACIAL_5KPS_112 * scale
 
     def align_face(
         self,
         frame: np.ndarray,
-        kps: np.ndarray,
+        kps: Optional[np.ndarray] = None,
         bbox: Optional[Tuple[int, int, int, int]] = None
     ) -> np.ndarray:
         """
         Aligns a human face geometrically using 5 facial keypoints.
-        
-        Args:
-            frame (np.ndarray): Full BGR image frame.
-            kps (np.ndarray): Shape (5, 2) facial keypoints.
-            bbox (Tuple[int, int, int, int], optional): Fallback bounding box (x, y, w, h).
-            
-        Returns:
-            np.ndarray: Aligned BGR face chip of shape (112, 112, 3).
+        Uses 2D similarity affine transformation matrix estimation to level eyes horizontally.
         """
         if frame is None or frame.size == 0:
             return np.zeros((*self.target_size, 3), dtype=np.uint8)
 
         h_frame, w_frame = frame.shape[:2]
 
-        # Use generous face bounding box crop to capture eyes, nose, mouth, and chin fully
+        # 1. Primary path: 5-point geometric affine transformation matrix estimate
+        if kps is not None and isinstance(kps, np.ndarray) and kps.shape == (5, 2):
+            try:
+                src_pts = kps.astype(np.float32)
+                dst_pts = self.reference_template.astype(np.float32)
+                
+                # Estimate 2D Similarity Affine Transform (rotation, translation, scale)
+                M, _ = cv2.estimateAffinePartial2D(src_pts, dst_pts)
+                if M is not None:
+                    aligned = cv2.warpAffine(frame, M, self.target_size, flags=cv2.INTER_LINEAR, borderValue=(0, 0, 0))
+                    if aligned is not None and aligned.size > 0:
+                        return aligned
+            except Exception as err:
+                print(f"[FaceAligner Warning] 5-point affine alignment fallback: {err}")
+
+        # 2. Fallback path: Tight bounding box crop centered on face (no neck/chest distortion)
         if bbox is not None:
             x, y, w, h = bbox
-            pad_w = int(w * 0.20)
-            pad_h_top = int(h * 0.15)
-            pad_h_bottom = int(h * 0.35)
+            pad_w = int(w * 0.05)
+            pad_h = int(h * 0.05)
             x1 = max(0, x - pad_w)
-            y1 = max(0, y - pad_h_top)
+            y1 = max(0, y - pad_h)
             x2 = min(w_frame, x + w + pad_w)
-            y2 = min(h_frame, y + h + pad_h_bottom)
+            y2 = min(h_frame, y + h + pad_h)
             chip = frame[y1:y2, x1:x2]
             if chip.size > 0:
                 return cv2.resize(chip, self.target_size)
