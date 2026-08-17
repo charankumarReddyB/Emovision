@@ -53,18 +53,18 @@ export default function LiveDetection() {
   useEffect(() => {
     let interval: ReturnType<typeof setInterval> | null = null
     const canvas = document.createElement('canvas')
-    canvas.width = 480
-    canvas.height = 360
+    canvas.width = 320
+    canvas.height = 240
     const ctx = canvas.getContext('2d')
 
     if (cameraOn && sessionActive && wsStatus === 'connected') {
       interval = setInterval(() => {
         if (videoRef.current && wsRef.current && videoRef.current.readyState >= 2) {
-          ctx?.drawImage(videoRef.current, 0, 0, 480, 360)
-          const base64Img = canvas.toDataURL('image/jpeg', 0.45)
+          ctx?.drawImage(videoRef.current, 0, 0, 320, 240)
+          const base64Img = canvas.toDataURL('image/jpeg', 0.35)
           wsRef.current.sendFrame(base64Img)
         }
-      }, 40)
+      }, 100)
     }
 
     return () => {
