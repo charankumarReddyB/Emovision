@@ -22,7 +22,7 @@ def test_model_loading_and_batch_inference():
     print("=" * 75)
 
     # 1. Model Location Verification
-    dan_model = BASE_DIR.parent / "models" / "dan_rafdb.pth"
+    dan_model = BASE_DIR / "app" / "models_weights" / "dan_rafdb.pth"
 
     print(f"\n[1/6] Checking Model File Paths:")
     print(f"  • DAN Checkpoint Path: {dan_model} (Exists: {dan_model.exists()})")

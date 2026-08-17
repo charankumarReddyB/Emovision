@@ -30,8 +30,8 @@ class Settings(BaseModel):
     SUPABASE_KEY: str = Field(default_factory=lambda: os.getenv("SUPABASE_KEY", ""))
     DATABASE_URL: str = Field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
     DATABASE_PATH: Path = DATA_DIR_PATH / "emovision.db"
-    # Root Models Directory & Model Integration Contract
-    ROOT_MODELS_DIR: Path = BASE_DIR.parent / "models"
+    # Models Directory & Model Integration Contract
+    ROOT_MODELS_DIR: Path = MODELS_DIR_PATH
     EMOTION_MODEL_NAME: str = "dan_rafdb.pth"
     ONNX_MODEL_NAME: str = "emotion_model.onnx"
     

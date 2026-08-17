@@ -32,10 +32,10 @@ class EmotionClassifier:
         self.aligner = FaceAligner(target_size=(224, 224))
         self.confidence_threshold = settings.CONFIDENCE_THRESHOLD
         
-        root_models_dir = BASE_DIR.parent / "models"
-        dan_path = root_models_dir / "dan_rafdb.pth"
-        onnx_path = root_models_dir / "emotion_model.onnx"
-        fallback_onnx = BASE_DIR / "app" / "models_weights" / "facial_expression_recognition_mobilefacenet_2022july.onnx"
+        models_dir = BASE_DIR / "app" / "models_weights"
+        dan_path = models_dir / "dan_rafdb.pth"
+        onnx_path = models_dir / "emotion_model.onnx"
+        fallback_onnx = models_dir / "facial_expression_recognition_mobilefacenet_2022july.onnx"
 
         if model_path is None:
             if dan_path.exists():
