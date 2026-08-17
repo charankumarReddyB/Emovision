@@ -129,7 +129,7 @@ def verify_and_evaluate():
     aligner = FaceAligner(target_size=(224, 224))
 
     # Look for test dataset in backend/data/rafdb_test/
-    raf_test_dir = BASE_DIR.parent / "data" / "rafdb_test"
+    raf_test_dir = BASE_DIR / "data" / "rafdb_test"
     dataset_dir = raf_test_dir / "DATASET" / "test"
     csv_labels_path = raf_test_dir / "test_labels.csv"
 

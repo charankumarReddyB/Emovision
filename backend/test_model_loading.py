@@ -32,9 +32,9 @@ def test_model_loading_and_batch_inference():
     print(f"\n[2/6] EmotionClassifier Status:")
     print(f"  • Weights Loaded     : {classifier.is_weights_loaded}")
     print(f"  • Loaded Model Path  : {classifier.loaded_model_path}")
-    print(f"  • Confidence Cutoff  : {classifier.confidence_threshold} (50%)")
+    print(f"  • Confidence Cutoff  : {classifier.confidence_threshold} ({int(classifier.confidence_threshold * 100)}%)")
 
-    assert classifier.is_weights_loaded, "ERROR: Failed to load DAN PyTorch model weights!"
+    assert classifier.is_weights_loaded, "ERROR: Failed to load POSTER PyTorch model weights!"
 
     # 3. Inspect Input and Output Contracts
     print(f"\n[3/6] FER Model Tensor Contracts:")
@@ -46,7 +46,7 @@ def test_model_loading_and_batch_inference():
 
     # 4. Test Single Face Inference
     sample_face = np.full((224, 224, 3), 120, dtype=np.uint8)
-    label, conf = classifier.predict_face(sample_face)
+    label, conf = classifier.classify_single(sample_face)
     print(f"\n[4/6] Single Face Inference Test:")
     print(f"  • Result             : Label='{label}', Confidence={conf*100:.1f}%")
 
@@ -65,7 +65,7 @@ def test_model_loading_and_batch_inference():
     # 6. Test Confidence Thresholding ('Uncertain' for low confidence)
     print(f"\n[6/6] Testing Confidence Thresholding:")
     classifier.confidence_threshold = 0.99  # Force strict cutoff
-    uncertain_label, _ = classifier.predict_face(sample_face)
+    uncertain_label, _ = classifier.classify_single(sample_face)
     print(f"  • Strict 99% Cutoff  : Expected 'Uncertain', Got '{uncertain_label}'")
     assert uncertain_label == "Uncertain", "ERROR: Low confidence prediction was not reported as 'Uncertain'!"
     classifier.confidence_threshold = 0.50  # Reset to default
