@@ -182,7 +182,7 @@ class SCRFDDetector:
             w_box = max(0, x2 - x1)
             h_box = max(0, y2 - y1)
             
-            if w_box < 80 or h_box < 80:
+            if w_box < 15 or h_box < 15:
                 continue
                 
             scaled_kps = kps.copy()

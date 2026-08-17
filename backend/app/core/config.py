@@ -32,6 +32,7 @@ class Settings(BaseModel):
     DATABASE_PATH: Path = DATA_DIR_PATH / "emovision.db"
     # Models Directory & Model Integration Contract
     ROOT_MODELS_DIR: Path = MODELS_DIR_PATH
+    MODELS_DIR: Path = MODELS_DIR_PATH
     EMOTION_MODEL_NAME: str = "dan_rafdb.pth"
     ONNX_MODEL_NAME: str = "emotion_model.onnx"
     

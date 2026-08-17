@@ -16,13 +16,13 @@ class FaceDetector:
     Wrapper for OpenCV YuNet / SCRFD face detector and 5-point facial keypoint aligner.
     Uses score_threshold=0.20 to catch background and partially occluded faces.
     """
-    def __init__(self, score_threshold: float = 0.20, nms_threshold: float = 0.30):
+    def __init__(self, score_threshold: float = 0.15, nms_threshold: float = 0.30):
         self.score_threshold = score_threshold
         self.nms_threshold = nms_threshold
-        self.aligner = FaceAligner(target_size=(112, 112))
+        self.aligner = FaceAligner(target_size=(224, 224))
         
         self.yunet_detector = None
-        yunet_path = settings.MODELS_DIR / "face_detection_yunet_2023mar.onnx"
+        yunet_path = settings.ROOT_MODELS_DIR / "face_detection_yunet_2023mar.onnx"
         if yunet_path.exists():
             try:
                 self.yunet_detector = cv2.FaceDetectorYN.create(
@@ -80,7 +80,7 @@ class FaceDetector:
                     # Standard order: [left_eye, right_eye, nose, left_mouth, right_mouth]
                     kps = np.array([l_eye, r_eye, nose, l_mouth, r_mouth], dtype=np.float32)
                     
-                    chip = frame[y:y+bh, x:x+bw].copy() if bw > 0 and bh > 0 else np.zeros((112, 112, 3), dtype=np.uint8)
+                    chip = frame[y:y+bh, x:x+bw].copy() if bw > 0 and bh > 0 else np.zeros((224, 224, 3), dtype=np.uint8)
                     aligned_chip = self.aligner.align_face(frame, kps, (x, y, bw, bh))
                     
                     results.append({
