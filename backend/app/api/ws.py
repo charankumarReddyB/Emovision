@@ -26,30 +26,27 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
     
     try:
         while True:
-            frame = None
-            
-            # 1. Non-blocking receive latest base64 video frame from client
+            # 1. Receive latest base64 video frame from client
             try:
-                data = await asyncio.wait_for(websocket.receive_text(), timeout=0.04)
-                # Drain any stale queued frames to guarantee we always process the instantaneous current frame
-                while not websocket.client_state.name == "DISCONNECTED":
-                    try:
-                        newer_data = await asyncio.wait_for(websocket.receive_text(), timeout=0.001)
-                        if newer_data:
-                            data = newer_data
-                    except asyncio.TimeoutError:
-                        break
-                        
-                if data:
-                    if "," in data:
-                        data = data.split(",")[1]
-                    img_bytes = base64.b64decode(data)
-                    nparr = np.frombuffer(img_bytes, np.uint8)
-                    frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
-            except asyncio.TimeoutError:
-                pass
+                data = await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
             except Exception:
-                pass
+                break
+
+            if not data:
+                await asyncio.sleep(0.005)
+                continue
+
+            if "," in data:
+                data = data.split(",")[1]
+
+            try:
+                img_bytes = base64.b64decode(data)
+                nparr = np.frombuffer(img_bytes, np.uint8)
+                frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+            except Exception:
+                continue
 
             if frame is None or frame.size == 0:
                 await asyncio.sleep(0.005)
@@ -57,7 +54,7 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
 
             frame_idx += 1
             
-            # 2. Execute 5-point face detection + 112x112 affine alignment + MobileFaceNet ONNX classifier
+            # 2. Execute face detection + alignment + MobileFaceNet ONNX classifier
             annotated_frame, live_stats, classified_detections = pipeline.process_frame_with_detections(frame, frame_idx)
             
             h, w = frame.shape[:2]
@@ -107,9 +104,11 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
             except Exception:
                 break
                 
-            await asyncio.sleep(0.005)
+            await asyncio.sleep(0.002)
 
     except WebSocketDisconnect:
         print(f"[WebSocket] Client disconnected for session '{session_id}'.")
+    except Exception as e:
+        print(f"[WebSocket] Error in session '{session_id}': {e}")
     finally:
         pipeline.close()
