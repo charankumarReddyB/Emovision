@@ -29,20 +29,16 @@ class EmotionClassifier:
     """
     def __init__(self, model_path: Optional[Path] = None):
         models_dir = BASE_DIR / "app" / "models_weights"
-        onnx_colab = models_dir / "emotion_model.onnx"
-        onnx_mobilefacenet = models_dir / "facial_expression_recognition_mobilefacenet_2022july.onnx"
         dan_path = models_dir / "dan_rafdb.pth"
 
         if model_path is None:
-            if onnx_colab.exists():
-                model_path = onnx_colab
-            elif onnx_mobilefacenet.exists():
-                model_path = onnx_mobilefacenet
-            elif dan_path.exists():
+            if dan_path.exists():
                 model_path = dan_path
+            else:
+                model_path = models_dir / "emotion_model.onnx"
 
-        self.labels = OPENCV_FER_CLASSES
-        self.aligner = FaceAligner(target_size=(112, 112))
+        self.labels = DAN_RAFDB_LABELS
+        self.aligner = FaceAligner(target_size=(224, 224))
         self.confidence_threshold = settings.CONFIDENCE_THRESHOLD
         
         self.pytorch_model = None
@@ -52,7 +48,41 @@ class EmotionClassifier:
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         if model_path and model_path.exists():
-            if str(model_path).endswith(".onnx"):
+            if str(model_path).endswith(".pth") or str(model_path).endswith(".pt"):
+                try:
+                    self.pytorch_model = DAN(num_class=7, pretrained=False).to(self.device)
+                    ckpt = torch.load(str(model_path), map_location=self.device)
+                    
+                    # Strict state dict loading verification
+                    if isinstance(ckpt, dict) and 'model_state_dict' in ckpt:
+                        state_dict = ckpt['model_state_dict']
+                    elif isinstance(ckpt, dict) and 'state_dict' in ckpt:
+                        state_dict = ckpt['state_dict']
+                    elif isinstance(ckpt, dict):
+                        state_dict = ckpt
+                    else:
+                        raise ValueError("Invalid checkpoint format")
+                        
+                    missing, unexpected = self.pytorch_model.load_state_dict(state_dict, strict=True)
+                    if missing or unexpected:
+                        raise RuntimeError(f"State dict mismatch! Missing: {missing}, Unexpected: {unexpected}")
+                        
+                    self.pytorch_model.eval()
+                    self.is_weights_loaded = True
+                    print(f"\n==========================================================================")
+                    print(f"[MODEL VERIFICATION PROOF] DAN RAF-DB PyTorch Model Successfully Loaded!")
+                    print(f"  • Model File        : {model_path.name}")
+                    print(f"  • Full Path         : {model_path}")
+                    print(f"  • Device            : {self.device}")
+                    print(f"  • Parameters        : {sum(p.numel() for p in self.pytorch_model.parameters()):,}")
+                    print(f"  • Input Shape       : [1, 3, 224, 224]")
+                    print(f"  • Output Shape      : [1, 7]")
+                    print(f"  • Class Order (DAN) : {dict(enumerate(DAN_RAFDB_LABELS))}")
+                    print(f"==========================================================================\n")
+                except Exception as e:
+                    print(f"[EmotionClassifier CRITICAL ERROR] Could not load DAN PyTorch model: {e}")
+                    raise e
+            elif str(model_path).endswith(".onnx"):
                 try:
                     opts = ort.SessionOptions()
                     opts.log_severity_level = 3
@@ -60,27 +90,12 @@ class EmotionClassifier:
                     self.input_name = self.session.get_inputs()[0].name
                     self.output_name = self.session.get_outputs()[0].name
                     self.is_weights_loaded = True
+                    self.labels = OPENCV_FER_CLASSES
+                    self.aligner = FaceAligner(target_size=(112, 112))
                     print(f"[EmotionClassifier Info] Successfully loaded ONNX FER model from: {model_path}")
                 except Exception as e:
                     print(f"[EmotionClassifier Warning] Could not load ONNX model from {model_path}: {e}")
                     self.session = None
-            elif str(model_path).endswith(".pth") or str(model_path).endswith(".pt"):
-                try:
-                    self.pytorch_model = DAN(num_class=7, pretrained=False).to(self.device)
-                    ckpt = torch.load(str(model_path), map_location=self.device)
-                    if isinstance(ckpt, dict) and 'model_state_dict' in ckpt:
-                        self.pytorch_model.load_state_dict(ckpt['model_state_dict'], strict=False)
-                    elif isinstance(ckpt, dict) and 'state_dict' in ckpt:
-                        self.pytorch_model.load_state_dict(ckpt['state_dict'], strict=False)
-                    elif isinstance(ckpt, dict):
-                        self.pytorch_model.load_state_dict(ckpt, strict=False)
-                    self.pytorch_model.eval()
-                    self.aligner = FaceAligner(target_size=(224, 224))
-                    self.is_weights_loaded = True
-                    print(f"[EmotionClassifier Info] Successfully loaded PyTorch model from: {model_path}")
-                except Exception as e:
-                    print(f"[EmotionClassifier Warning] Could not load PyTorch model: {e}")
-                    self.pytorch_model = None
 
     def _softmax(self, x: np.ndarray) -> np.ndarray:
         exp_x = np.exp(x - np.max(x, axis=-1, keepdims=True))

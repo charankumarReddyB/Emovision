@@ -16,7 +16,7 @@ class FaceDetector:
     Wrapper for OpenCV YuNet / SCRFD face detector and 5-point facial keypoint aligner.
     Uses score_threshold=0.20 to catch background and partially occluded faces.
     """
-    def __init__(self, score_threshold: float = 0.15, nms_threshold: float = 0.30):
+    def __init__(self, score_threshold: float = 0.40, nms_threshold: float = 0.30):
         self.score_threshold = score_threshold
         self.nms_threshold = nms_threshold
         self.aligner = FaceAligner(target_size=(224, 224))
@@ -77,8 +77,8 @@ class FaceDetector:
                     l_mouth = face[12:14]
                     score = float(face[14])
                     
-                    # Standard order: [left_eye, right_eye, nose, left_mouth, right_mouth]
-                    kps = np.array([l_eye, r_eye, nose, l_mouth, r_mouth], dtype=np.float32)
+                    # Correct template order matching reference template: [r_eye, l_eye, nose, r_mouth, l_mouth]
+                    kps = np.array([r_eye, l_eye, nose, r_mouth, l_mouth], dtype=np.float32)
                     
                     chip = frame[y:y+bh, x:x+bw].copy() if bw > 0 and bh > 0 else np.zeros((224, 224, 3), dtype=np.uint8)
                     aligned_chip = self.aligner.align_face(frame, kps, (x, y, bw, bh))
