@@ -1,0 +1,21 @@
+# .dockerignore for backend Docker image
+# Exclude local virtual environment and caches
+.venv/
+venv/
+env/
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+# Git metadata
+.git
+.gitignore
+# Test and cache files
+.pytest_cache/
+*.log
+# Build artefacts
+dist/
+build/
+# OS files
+.DS_Store
+Thumbs.db
