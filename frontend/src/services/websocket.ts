@@ -1,6 +1,14 @@
 import type { DetectionPayload } from '../types'
 
-const WS_BASE_URL = import.meta.env.VITE_WS_URL || 'ws://127.0.0.1:8000'
+const getWsBaseUrl = () => {
+  if (import.meta.env.VITE_WS_URL) return import.meta.env.VITE_WS_URL.trim()
+  if (import.meta.env.VITE_API_URL) {
+    return import.meta.env.VITE_API_URL.trim().replace(/^http/, 'ws')
+  }
+  return 'ws://127.0.0.1:8000'
+}
+
+const WS_BASE_URL = getWsBaseUrl()
 
 export type WebSocketStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error'
 

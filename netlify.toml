@@ -2,11 +2,7 @@
   command = "npm run build --prefix frontend"
   publish = "frontend/dist"
 
-[functions]
-  directory = "backend"
-
 [[redirects]]
-  from = "/api/*"
-  to = "/.netlify/functions/api"
+  from = "/*"
+  to = "/index.html"
   status = 200
-  force = true
