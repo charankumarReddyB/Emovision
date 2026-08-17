@@ -1,7 +1,7 @@
 # Emovision — Real-Time Multi-Face Facial Expression Recognition System
 
 **Capstone Project**  
-*High-Accuracy, Real-Time Multi-Face Facial Expression Recognition Using SCRFD-500M ONNX Face Detection, 5-Point Affine Alignment, and Official POSTER (Pyramid Cross-Fusion Transformer) Deep Learning Model (Measured RAF-DB Test Accuracy: 92.01%)*
+*High-Accuracy, Real-Time Multi-Face Facial Expression Recognition Using SCRFD-500M ONNX Face Detection, Full Face Crop Alignment, and Official Lightweight EfficientFace (1.27M Params, 88.23% Measured RAF-DB Accuracy) for Fast CPU Live Deployment*
 
 ---
 
@@ -11,8 +11,9 @@
 
 The system implements a modular deep learning pipeline:
 - **High-Quality Face Detection**: Integrates **SCRFD-500M** (`scrfd_500m_bnkps.onnx`) ONNX engine to locate faces and 5 facial keypoints (`left_eye`, `right_eye`, `nose`, `left_mouth`, `right_mouth`).
-- **Geometric 5-Point Affine Alignment**: Warps each detected face into a standardized 224×224 BGR chip using landmark affine transformations, preserving eye angle horizontal alignment.
-- **Official POSTER PyTorch Emotion Classifier**: Official **POSTER (Pyramid Cross-Fusion Transformer Network, 71.85M Parameters)** model (`poster_repo/checkpoint/rafdb_best.pth`) performing dynamic matrix batch inference across 7 target expression classes with ImageNet BGR normalization (**Measured RAF-DB Test Accuracy: 92.01%**).
+- **Full Face Crop Alignment**: Warps each detected face into a standardized 224×224 chip with 15% bounding box margin, preserving complete face features (forehead, eyes, nose, mouth, chin).
+- **Official EfficientFace Live Model**: Lightweight **EfficientFace** model (`efficientface_repo/checkpoint/efficientface_rafdb.pth`, 1.27M parameters) performing single-pass matrix batch tensor inference (**Measured RAF-DB Test Accuracy: 88.23%**, **196.5 images/sec on CPU**).
+- **Official POSTER Reference Model**: High-accuracy **POSTER** model (`poster_repo/checkpoint/rafdb_best.pth`, 71.85M parameters, **92.01% Measured RAF-DB Test Accuracy**) maintained as offline reference/benchmark.
 - **FastAPI & WebSocket Telemetry**: Asynchronous WebSocket streaming (`/ws/detection/{session_id}`) broadcasting real-time expression statistics, confidence percentages, and bounding box coordinates to the web frontend.
 - **Supabase Cloud Database & Storage**: Production PostgreSQL persistence (`SupabaseRepository`) with local SQLite fallback for session analytics, aggregated stats, and exportable reports.
 - **Modern React Single Page Application**: Interactive dashboard featuring live webcam video overlay, facial bounding box overlays, emotion distribution charts, chronological timeline analytics, session logs, and PDF export.

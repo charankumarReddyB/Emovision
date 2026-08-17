@@ -19,8 +19,8 @@ class SCRFDDetector:
     def __init__(
         self,
         model_path: Optional[Path] = None,
-        score_threshold: float = 0.50,
-        nms_threshold: float = 0.40,
+        score_threshold: float = 0.30,
+        nms_threshold: float = 0.35,
         input_size: Tuple[int, int] = (640, 640)
     ):
         self.score_threshold = score_threshold

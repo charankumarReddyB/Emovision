@@ -1,5 +1,5 @@
 """
-Acceptance & Benchmark Verification Test Suite for Emovision Real-Time Pipeline.
+Acceptance & Benchmark Verification Test Suite for Emovision Live Pipeline.
 Evaluates 7 pipeline acceptance scenarios:
 1. 1 face detection & classification
 2. 2 face batch detection & classification
@@ -7,7 +7,7 @@ Evaluates 7 pipeline acceptance scenarios:
 4. 5 face batch detection & classification
 5. Expression sensitivity
 6. False detections on empty scene
-7. FPS & Latency performance benchmarks
+7. FPS & Latency performance benchmarks (EfficientFace 1.27M model)
 """
 import sys
 import time
@@ -23,37 +23,48 @@ from app.services.realtime_pipeline import RealtimePipeline
 from app.services.scrfd_detector import SCRFDDetector
 from app.services.emotion_classifier import EmotionClassifier
 
-def create_synthetic_scene(num_faces: int = 1, width: int = 640, height: int = 480) -> np.ndarray:
-    """Generates a test image with N face crops composite placed across background."""
-    scene = np.full((height, width, 3), 110, dtype=np.uint8)
+def create_multi_face_scene(num_faces: int = 1, canvas_w: int = 1280, canvas_h: int = 720) -> np.ndarray:
+    """Generates a realistic multi-face test scene with N face crops cleanly arranged."""
+    scene = np.full((canvas_h, canvas_w, 3), 120, dtype=np.uint8)
     if num_faces == 0:
         return scene
 
-    sample_face_path = Path(__file__).resolve().parent / "data" / "rafdb_test" / "DATASET" / "test" / "4" / "test_0003_aligned.jpg"
-    if sample_face_path.exists():
-        face_src = cv2.imread(str(sample_face_path))
-    else:
-        face_src = np.full((120, 120, 3), 180, dtype=np.uint8)
-        cv2.circle(face_src, (40, 40), 10, (50, 50, 50), -1)
-        cv2.circle(face_src, (80, 40), 10, (50, 50, 50), -1)
+    sample_dir = Path(__file__).resolve().parent / "data" / "rafdb_test" / "DATASET" / "test"
+    face_paths = []
+    
+    # Pick distinct test faces from different emotion folders
+    for class_id in range(1, 8):
+        folder = sample_dir / str(class_id)
+        if folder.exists():
+            imgs = list(folder.glob("*.jpg"))
+            if imgs:
+                face_paths.append(imgs[0])
 
-    face_size = 100
-    face_resized = cv2.resize(face_src, (face_size, face_size))
+    if not face_paths:
+        face_paths = [Path(__file__).resolve().parent / "debug_face.png"]
 
-    positions = [
-        (50, 50), (200, 50), (350, 50), (500, 50),
-        (50, 250), (200, 250), (350, 250), (500, 250)
+    # Coordinates for placing N non-overlapping faces across 1280x720 canvas
+    coords = [
+        (60, 150), (300, 150), (540, 150), (780, 150), (1020, 150),
+        (60, 450), (300, 450), (540, 450), (780, 450), (1020, 450)
     ]
 
-    for idx in range(min(num_faces, len(positions))):
-        px, py = positions[idx]
-        scene[py:py+face_size, px:px+face_size] = face_resized
+    target_size = 180
+
+    for idx in range(min(num_faces, len(coords))):
+        cx, cy = coords[idx]
+        img_p = face_paths[idx % len(face_paths)]
+        if img_p.exists():
+            f_img = cv2.imread(str(img_p))
+            if f_img is not None and f_img.size > 0:
+                f_resized = cv2.resize(f_img, (target_size, target_size))
+                scene[cy:cy+target_size, cx:cx+target_size] = f_resized
 
     return scene
 
 def run_acceptance_tests():
     print("=" * 80)
-    print("EMOVISION REAL-TIME PIPELINE FINAL ACCEPTANCE TEST SUITE")
+    print("EMOVISION EFFICIENTFACE LIVE PIPELINE ACCEPTANCE TEST SUITE")
     print("=" * 80)
 
     pipeline = RealtimePipeline()
@@ -73,7 +84,7 @@ def run_acceptance_tests():
     print("-" * 80)
 
     for name, n_faces in scenarios:
-        scene = create_synthetic_scene(n_faces)
+        scene = create_multi_face_scene(n_faces)
         
         t0 = time.time()
         _, stats, detections = pipeline.process_frame_with_detections(scene, frame_idx=1)
@@ -86,28 +97,29 @@ def run_acceptance_tests():
         if n_faces == 0:
             passed = (det_count == 0)
         else:
-            passed = (det_count >= 1)
+            passed = (det_count >= min(n_faces, 4))
 
         result_str = "PASS" if passed else "FAIL"
-        test_results.append((name, result_str, det_count, t_elapsed, fps))
+        test_results.append((name, result_str, det_count, n_faces, t_elapsed, fps))
 
         print(f"  • {name:16s} -> Result: {result_str:4s} | Detected: {det_count}/{n_faces} faces | Latency: {t_elapsed:6.2f} ms ({fps:5.1f} FPS)")
 
     print("\n" + "=" * 80)
     print("ACCEPTANCE TEST SUMMARY REPORT")
     print("=" * 80)
-    print(f"{'Test Scenario':20s}{'Result':10s}{'Detected':12s}{'Latency':12s}{'FPS':10s}")
-    print("-" * 65)
-    for name, res, det, lat, fps in test_results:
-        print(f"{name:20s}{res:10s}{det:12d}{lat:8.2f} ms   {fps:6.1f} FPS")
+    print(f"{'Test Scenario':20s}{'Result':10s}{'Detected':15s}{'Latency':12s}{'FPS':10s}")
+    print("-" * 68)
+    for name, res, det, target_n, lat, fps in test_results:
+        print(f"{name:20s}{res:10s}{f'{det}/{target_n} faces':15s}{lat:8.2f} ms   {fps:6.1f} FPS")
 
-    print("\nPERFORMANCE LATENCY BREAKDOWN (POSTER 71.85M Model):")
+    print("\nPERFORMANCE LATENCY BREAKDOWN (EfficientFace 1.27M Live Model):")
     print(f"  • PyTorch Hardware Device : {pipeline.classifier.device}")
     print(f"  • CPU Parallel Threads    : {torch.get_num_threads()}")
     print(f"  • SCRFD Detection Latency : ~16-25 ms")
-    print(f"  • Single Face Batch (N=1) : {latencies.get('1_faces', 0.0):.2f} ms ({1000.0/max(1.0, latencies.get('1_faces', 1.0)):.1f} FPS)")
-    print(f"  • Multi-Face Batch (N=3)  : {latencies.get('3_faces', 0.0):.2f} ms ({1000.0/max(1.0, latencies.get('3_faces', 1.0)):.1f} FPS)")
-    print(f"  • Multi-Face Batch (N=5)  : {latencies.get('5_faces', 0.0):.2f} ms ({1000.0/max(1.0, latencies.get('5_faces', 1.0)):.1f} FPS)")
+    print(f"  • 1 Face Batch (N=1)      : {latencies.get('1_faces', 0.0):.2f} ms ({1000.0/max(1.0, latencies.get('1_faces', 1.0)):.1f} FPS)")
+    print(f"  • 2 Faces Batch (N=2)     : {latencies.get('2_faces', 0.0):.2f} ms ({1000.0/max(1.0, latencies.get('2_faces', 1.0)):.1f} FPS)")
+    print(f"  • 3 Faces Batch (N=3)     : {latencies.get('3_faces', 0.0):.2f} ms ({1000.0/max(1.0, latencies.get('3_faces', 1.0)):.1f} FPS)")
+    print(f"  • 5 Faces Batch (N=5)     : {latencies.get('5_faces', 0.0):.2f} ms ({1000.0/max(1.0, latencies.get('5_faces', 1.0)):.1f} FPS)")
     print("=" * 80)
 
 if __name__ == "__main__":

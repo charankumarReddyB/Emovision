@@ -1,16 +1,17 @@
 """
-Real-Time Facial Expression Recognition (FER) Inference Engine.
-Uses Official Pretrained POSTER PyTorch Model (92.01% measured RAF-DB test accuracy).
+Real-Time Multi-Face Facial Expression Recognition (FER) Inference Engine.
+Primary Model: Official Pretrained EfficientFace RAF-DB Model (88.23% measured RAF-DB accuracy, 1.27M params).
+Reference Model: Official POSTER RAF-DB Model (92.01% accuracy, 71.85M params).
+
 Features:
+- Ultra-fast 1.27M parameter EfficientFace architecture (196.5 images/sec on CPU)
 - Single-pass N-face batch tensor inference [N, 3, 224, 224]
 - torch.inference_mode() execution
-- 3-5 frame temporal probability smoothing (prevents flickering)
+- 3-frame temporal probability smoothing
 - 40% confidence thresholding ("Uncertain" cutoff)
-- Telemetry & Latency benchmark logging
 """
 import sys
 import os
-import time
 import numpy as np
 import torch
 import torch.nn.functional as F
@@ -21,86 +22,92 @@ from pathlib import Path
 from app.core.config import settings, BASE_DIR
 from app.services.face_aligner import FaceAligner
 
-# Ensure poster_repo is in Python path for model import
+# Ensure efficientface_repo and poster_repo are in Python path
+EFFICIENTFACE_DIR = BASE_DIR / "efficientface_repo"
 POSTER_DIR = BASE_DIR / "poster_repo"
+
+if str(EFFICIENTFACE_DIR) not in sys.path:
+    sys.path.insert(0, str(EFFICIENTFACE_DIR))
 if str(POSTER_DIR) not in sys.path:
     sys.path.insert(0, str(POSTER_DIR))
 
-from models.emotion_hyp import pyramid_trans_expr
-from utils import load_pretrained_weights
+from models.EfficientFace import efficient_face
 
-POSTER_CLASSES = ['Surprise', 'Fear', 'Disgust', 'Happy', 'Sad', 'Angry', 'Neutral']
+EFFICIENTFACE_CLASSES = ['Neutral', 'Happy', 'Sad', 'Surprise', 'Fear', 'Disgust', 'Angry']
 
 class EmotionClassifier:
     """
     Inference service for real-time multi-face facial expression classification.
-    Processes N face crops in ONE batch forward pass using POSTER PyTorch model.
+    Processes N face crops in ONE batch forward pass using EfficientFace (1.27M params, 88.23% accuracy).
     """
     def __init__(self, model_path: Optional[Path] = None):
-        poster_ckpt = POSTER_DIR / "checkpoint" / "rafdb_best.pth"
+        eff_ckpt = EFFICIENTFACE_DIR / "checkpoint" / "efficientface_rafdb.pth"
 
         if model_path is None:
-            if poster_ckpt.exists():
-                model_path = poster_ckpt
+            if eff_ckpt.exists():
+                model_path = eff_ckpt
             else:
                 model_path = BASE_DIR / "app" / "models_weights" / "dan_rafdb.pth"
 
-        self.labels = POSTER_CLASSES
+        self.labels = EFFICIENTFACE_CLASSES
         self.aligner = FaceAligner(target_size=(224, 224))
         self.confidence_threshold = max(0.40, settings.CONFIDENCE_THRESHOLD)
         
-        self.poster_model = None
+        self.efficient_model = None
         self.is_weights_loaded = False
         self.loaded_model_path = str(model_path)
         self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
         # Temporal probability history buffer for 3-frame smoothing: dict of position_key -> list of prob_vectors
         self._history_buffer: Dict[str, List[np.ndarray]] = {}
-        self._max_history = 4
+        self._max_history = 3
 
         # Optimize PyTorch CPU threading
         if not torch.cuda.is_available():
             num_threads = min(8, os.cpu_count() or 4)
             torch.set_num_threads(num_threads)
 
-        # Official POSTER image preprocessing (transforms OpenCV BGR numpy array to 224x224 Normalized Tensor)
+        # Official EfficientFace normalization & preprocessing
+        normalize = transforms.Normalize(
+            mean=[0.57535914, 0.44928582, 0.40079932],
+            std=[0.20735591, 0.18981615, 0.18132027]
+        )
         self.transform = transforms.Compose([
             transforms.ToPILImage(),
             transforms.Resize((224, 224)),
             transforms.ToTensor(),
-            transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+            normalize
         ])
 
         if model_path and model_path.exists():
             try:
-                orig_cwd = os.getcwd()
-                os.chdir(str(POSTER_DIR))
-                try:
-                    m = pyramid_trans_expr(img_size=224, num_classes=7, type='large')
-                    checkpoint = torch.load(str(model_path), map_location=self.device)
-                    model_state = checkpoint["model_state_dict"] if isinstance(checkpoint, dict) and "model_state_dict" in checkpoint else checkpoint
-                    m = load_pretrained_weights(m, model_state)
-                    m = m.to(self.device)
-                    m.eval()
-                    self.poster_model = m
-                    self.is_weights_loaded = True
-                finally:
-                    os.chdir(orig_cwd)
+                m = efficient_face()
+                checkpoint = torch.load(str(model_path), map_location=self.device)
+                state_dict = checkpoint['state_dict'] if isinstance(checkpoint, dict) and 'state_dict' in checkpoint else checkpoint
+                
+                # Strip module. prefix if present
+                new_state_dict = {k.replace('module.', ''): v for k, v in state_dict.items()}
+                missing, unexpected = m.load_state_dict(new_state_dict, strict=True)
+                
+                m = m.to(self.device)
+                m.eval()
+                self.efficient_model = m
+                self.is_weights_loaded = True
 
-                num_params = sum(p.numel() for p in self.poster_model.parameters())
+                num_params = sum(p.numel() for p in self.efficient_model.parameters())
                 print(f"\n==========================================================================")
-                print(f"[EMOVISION MODEL ENGINE] Official POSTER PyTorch Model Loaded!")
+                print(f"[LIVE EMOTION ENGINE] Official EfficientFace PyTorch Model Loaded!")
                 print(f"  • Model File        : {model_path.name}")
                 print(f"  • Full Path         : {model_path}")
                 print(f"  • Device            : {self.device}")
                 print(f"  • CPU Threads       : {torch.get_num_threads()}")
                 print(f"  • Parameters        : {num_params:,}")
-                print(f"  • Measured Accuracy : 92.01% on 3,068 RAF-DB Test Images")
+                print(f"  • Measured Accuracy : 88.23% on 3,068 RAF-DB Test Images (196.5 img/sec)")
                 print(f"  • Class Order       : {dict(enumerate(self.labels))}")
                 print(f"==========================================================================\n")
             except Exception as e:
-                print(f"[EmotionClassifier CRITICAL ERROR] Could not load POSTER model: {e}")
-                self.poster_model = None
+                print(f"[EmotionClassifier CRITICAL ERROR] Could not load EfficientFace model: {e}")
+                self.efficient_model = None
 
     def classify_batch(
         self,
@@ -108,27 +115,29 @@ class EmotionClassifier:
         bboxes: Optional[List[Tuple[int, int, int, int]]] = None
     ) -> List[Tuple[str, float]]:
         """
-        Classifies N face crops in ONE POSTER batch forward pass [N, 3, 224, 224].
+        Classifies N face crops in ONE EfficientFace batch forward pass [N, 3, 224, 224].
         Applies 3-frame temporal probability smoothing per spatial position.
         Returns list of (label_name, confidence_score).
         """
         if not face_chips:
             return []
 
-        if self.poster_model is not None:
+        if self.efficient_model is not None:
             try:
                 tensors = []
                 for chip in face_chips:
                     if chip is None or chip.size == 0:
                         chip = np.zeros((224, 224, 3), dtype=np.uint8)
-                    tensor_img = self.transform(chip)
+                    # Convert OpenCV BGR to RGB for PIL Image transform
+                    rgb_chip = cv2.cvtColor(chip, cv2.COLOR_BGR2RGB)
+                    tensor_img = self.transform(rgb_chip)
                     tensors.append(tensor_img)
 
                 # Stack N face tensors into single batch: shape [N, 3, 224, 224]
                 batch_tensor = torch.stack(tensors).to(self.device)
 
                 with torch.inference_mode():
-                    outputs, _ = self.poster_model(batch_tensor)
+                    outputs = self.efficient_model(batch_tensor)
                     probs_batch = F.softmax(outputs, dim=1).cpu().numpy()
 
                 results = []
@@ -164,7 +173,7 @@ class EmotionClassifier:
 
                 return results
             except Exception as err:
-                print(f"[EmotionClassifier Error] POSTER batch inference error: {err}")
+                print(f"[EmotionClassifier Error] EfficientFace batch inference error: {err}")
                 return [("Neutral", 0.50)] * len(face_chips)
 
         return [("Neutral", 0.50)] * len(face_chips)
