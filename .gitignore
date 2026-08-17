@@ -18,6 +18,7 @@ __pycache__/
 backend/data/*.db
 *.csv
 backend/data/dataset/
+backend/poster_repo/
 
 # Production / Build
 dist/
