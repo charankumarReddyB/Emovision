@@ -5,7 +5,11 @@ import type { Emotion, PersonDetection } from '../types'
 import { apiService } from '../services/api'
 import { DetectionWebSocket, type WebSocketStatus } from '../services/websocket'
 
+import ImageUploadAnalysis from './ImageUploadAnalysis'
+import VideoUploadAnalysis from './VideoUploadAnalysis'
+
 export default function LiveDetection() {
+  const [activeMode, setActiveMode] = useState<'webcam' | 'image' | 'video'>('webcam')
   const [cameraOn, setCameraOn] = useState(false)
   const [sessionActive, setSessionActive] = useState(false)
   const [sessionId, setSessionId] = useState<string | null>(null)
@@ -16,6 +20,7 @@ export default function LiveDetection() {
   const [duration, setDuration] = useState(0)
   const [wsStatus, setWsStatus] = useState<WebSocketStatus>('disconnected')
   const [errorMsg, setErrorMsg] = useState<string | null>(null)
+  const [endedNotice, setEndedNotice] = useState<{ sessionId: string } | null>(null)
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const wsRef = useRef<DetectionWebSocket | null>(null)
@@ -113,8 +118,6 @@ export default function LiveDetection() {
     }
   }, [handleMessage])
 
-  const [endedNotice, setEndedNotice] = useState<{ sessionId: string } | null>(null)
-
   const endSession = useCallback(() => {
     const finishedId = sessionId || 'sess_active'
 
@@ -194,26 +197,58 @@ export default function LiveDetection() {
     <div className="flex-1 flex flex-col overflow-hidden animate-fade-in">
       {/* Top bar */}
       <div
-        className="px-5 py-3 flex items-center gap-4 border-b"
+        className="px-5 py-3 flex items-center justify-between border-b"
         style={{ borderColor: 'rgba(0,212,255,0.08)', background: '#09101d' }}
       >
-        <h2 className="text-sm font-bold tracking-wide" style={{ color: '#e2e8f0' }}>
-          Live Multi-Person Detection Stream
-        </h2>
-
-        {sessionActive && (
-          <div
-            className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-mono"
-            style={{
-              background: 'rgba(239,68,68,0.12)',
-              border: '1px solid rgba(239,68,68,0.25)',
-              color: '#f87171',
-            }}
-          >
-            <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
-            REC · {sessionId}
+        <div className="flex items-center gap-3">
+          {/* Mode Selector Tabs */}
+          <div className="flex items-center gap-1 p-1 rounded-xl bg-slate-900 border border-slate-800">
+            <button
+              onClick={() => setActiveMode('webcam')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeMode === 'webcam'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              📹 Live Webcam
+            </button>
+            <button
+              onClick={() => setActiveMode('image')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeMode === 'image'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              📷 Upload Image
+            </button>
+            <button
+              onClick={() => setActiveMode('video')}
+              className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition-all ${
+                activeMode === 'video'
+                  ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              }`}
+            >
+              🎬 Upload Video
+            </button>
           </div>
-        )}
+
+          {sessionActive && (
+            <div
+              className="flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full font-mono"
+              style={{
+                background: 'rgba(239,68,68,0.12)',
+                border: '1px solid rgba(239,68,68,0.25)',
+                color: '#f87171',
+              }}
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-red-400 animate-pulse" />
+              REC · {sessionId}
+            </div>
+          )}
+        </div>
 
         {/* WebSocket Connection Status */}
         <div
@@ -299,7 +334,10 @@ export default function LiveDetection() {
         </div>
       )}
 
-      <div className="flex-1 flex gap-0 overflow-hidden">
+      {activeMode === 'image' && <ImageUploadAnalysis />}
+      {activeMode === 'video' && <VideoUploadAnalysis />}
+      {activeMode === 'webcam' && (
+        <div className="flex-1 flex gap-0 overflow-hidden">
         {/* Camera feed viewport */}
         <div className="flex-1 p-4 flex flex-col gap-3">
           <div
@@ -577,6 +615,7 @@ export default function LiveDetection() {
           )}
         </div>
       </div>
+      )}
 
       {/* Session Ended Toast Notification Popup */}
       {endedNotice && (

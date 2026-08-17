@@ -12,6 +12,7 @@ from app.db.database import init_db
 from app.api.health import router as health_router
 from app.api.sessions import router as sessions_router
 from app.api.analytics import router as analytics_router
+from app.api.analyze import router as analyze_router
 from app.api.ws import router as ws_router
 
 # Initialize SQLite database tables
@@ -52,6 +53,7 @@ async def global_exception_handler(request: Request, exc: Exception):
 app.include_router(health_router)
 app.include_router(sessions_router)
 app.include_router(analytics_router)
+app.include_router(analyze_router)
 app.include_router(ws_router)
 
 @app.get("/", include_in_schema=False)
