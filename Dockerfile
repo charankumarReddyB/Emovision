@@ -13,15 +13,13 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirement files and install Python dependencies
-COPY requirements.txt .
+COPY backend/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend source code
-COPY . .
+# Copy backend source code into container root
+COPY backend/ .
 
-# Expose FastAPI port
 EXPOSE 8000
 
-# Start Uvicorn server
 ENV PORT=8000
 CMD sh -c "uvicorn main:app --host 0.0.0.0 --port ${PORT}"
