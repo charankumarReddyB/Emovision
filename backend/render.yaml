@@ -1,0 +1,15 @@
+services:
+  - type: web
+    name: emovision-backend
+    env: docker
+    dockerfilePath: ./Dockerfile
+    rootDir: backend
+    region: oregon
+    plan: free
+    envVars:
+      - key: DATABASE_TYPE
+        value: supabase
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_KEY
+        sync: false

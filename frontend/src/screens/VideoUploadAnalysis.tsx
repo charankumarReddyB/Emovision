@@ -49,6 +49,8 @@ export default function VideoUploadAnalysis() {
     }
   }
 
+const API_BASE = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+
   // Poll video status from backend
   const startPollingStatus = (analysisId: string) => {
     stopPolling()
@@ -58,7 +60,7 @@ export default function VideoUploadAnalysis() {
 
     pollIntervalRef.current = setInterval(async () => {
       try {
-        const res = await fetch(`http://127.0.0.1:8000/api/analyze/video/${analysisId}/status`)
+        const res = await fetch(`${API_BASE}/api/analyze/video/${analysisId}/status`)
         if (!res.ok) {
           stopPolling()
           setLoading(false)
@@ -87,7 +89,7 @@ export default function VideoUploadAnalysis() {
 
   const fetchFinalResult = async (analysisId: string) => {
     try {
-      const res = await fetch(`http://127.0.0.1:8000/api/analyze/video/${analysisId}/result`)
+      const res = await fetch(`${API_BASE}/api/analyze/video/${analysisId}/result`)
       if (res.ok) {
         const resData = await res.json()
         setResult(resData)
@@ -111,7 +113,7 @@ export default function VideoUploadAnalysis() {
       startPollingStatus(savedId)
     } else {
       // Query backend for active running video job
-      fetch('http://127.0.0.1:8000/api/analyze/video/active')
+      fetch(`${API_BASE}/api/analyze/video/active`)
         .then((r) => r.json())
         .then((data) => {
           if (data.active_job && data.analysis_id) {
@@ -157,7 +159,7 @@ export default function VideoUploadAnalysis() {
       const formData = new FormData()
       formData.append('file', selectedFile)
 
-      const response = await fetch('http://127.0.0.1:8000/api/analyze/video', {
+      const response = await fetch(`${API_BASE}/api/analyze/video`, {
         method: 'POST',
         body: formData,
       })
