@@ -1,7 +1,7 @@
 # EmoVision — Real-Time Multi-Face Facial Expression Recognition Platform
 
 **Capstone Project**  
-*High-Accuracy, Real-Time Multi-Face Facial Expression Recognition Using SCRFD-500M ONNX Face Detection, Full Face Alignment, and Official EfficientFace (1.27M Params, 88.23% Measured RAF-DB Accuracy) for Fast CPU Live Deployment & Asynchronous Video Analytics.*
+*High-Accuracy, Real-Time Multi-Face Facial Expression Recognition Using SCRFD-500M ONNX Face Detection, 5-Point Geometric Affine Face Alignment, and Multi-Model Architectures (EfficientFace, DAN, EmotionCNN) Supported across RAF-DB and FER2013 Datasets.*
 
 ---
 
@@ -9,21 +9,47 @@
 
 **EmoVision** is a high-performance, production-ready computer vision platform designed for real-time facial expression recognition across **multiple visible faces** simultaneously.
 
-The system features:
-- **High-Quality Multi-Face Detection**: Integrates **SCRFD-500M** (`scrfd_500m_bnkps.onnx`) ONNX engine with aspect-ratio letterboxing to accurately locate faces and 5 facial keypoints (`left_eye`, `right_eye`, `nose`, `left_mouth`, `right_mouth`).
-- **Full Face Crop Alignment**: Warps each detected face into a standardized 224×224 chip with 15% bounding box margin padding.
-- **Official EfficientFace Live Model**: Lightweight **EfficientFace** model (`efficientface_rafdb.pth`, 1.27M parameters) performing single-pass matrix batch tensor inference (**Measured RAF-DB Test Accuracy: 88.23%**, **196.5 images/sec on CPU**).
-- **Official POSTER Benchmark Model**: High-accuracy **POSTER** model (`rafdb_best.pth`, 71.85M parameters, **92.01% Measured RAF-DB Test Accuracy**) maintained as reference benchmark.
-- **3 Analysis Input Modes**:
-  1. **Live Webcam**: Asynchronous real-time WebSocket telemetry stream (`/ws/detection/{session_id}`) with live bounding boxes, emotion labels, and confidence overlays.
-  2. **Image Upload**: Instant FER analysis for uploaded image files (`.jpg`, `.png`, `.webp`) with Base64 annotated output rendering.
-  3. **Video Upload**: Asynchronous background video FER job manager with real progress tracking (`frames_processed / total_frames`), tab-switch non-blocking execution, and browser refresh recovery.
-- **Supabase Cloud Database & Storage**: Production PostgreSQL persistence (`SupabaseRepository`) with local SQLite fallback storing session history, source types (`webcam`, `image`, `video`), aggregated statistics, and exportable PDF reports.
-- **Modern React Single Page Application**: Interactive UI featuring live webcam stream controls, mode tab selectors, emotion distribution pie charts, timeline analytics, filterable session history, and PDF export.
+The platform supports multiple model architectures and dataset pipelines:
+
+### Primary Models & Detectors
+- **Primary Face Detector**: **SCRFD-500M** (`scrfd_500m_bnkps.onnx`) ONNX engine with letterbox padding, high NMS IoU filtering, and 5 facial keypoint detection (`left_eye`, `right_eye`, `nose`, `left_mouth`, `right_mouth`).
+- **Primary Live Emotion Model**: Lightweight **EfficientFace** (`efficientface_rafdb.pth`, 1.27M parameters, **88.23% RAF-DB accuracy**, **196.5 frames/sec on CPU**).
+
+### Alternative Models & Training Pipelines Included
+- **DAN (Distract Your Attention Network)**: Multi-head cross-attention FER model (`app/ml/dan.py`, **89.70% benchmark accuracy**).
+- **EmotionCNN**: Custom 4-layer PyTorch convolutional neural network (`app/ml/model.py`) with BatchNorm, Dropout (0.4), and MaxPool.
+- **FER2013 & RAF-DB Datasets**: Dataset processing utilities (`app/ml/dataset.py`, `prepare_fer2013_csv.py`) supporting both Kaggle FER2013 (48x48 grayscale, 35,887 images) and RAF-DB (224x224 RGB, 15,339 images).
+- **Training & Transfer Learning Experiments**: Included scripts for class-weighted cross-entropy loss, focal loss, and transfer learning comparisons (`run_exp1_class_weighted.py`, `run_exp2_improved_model.py`, `run_transfer_learning_experiments.py`, `eval_and_generate_plots.py`).
 
 ---
 
-## 2. Pipeline Architecture
+## 2. Supported Datasets & 7-Class Emotion Mappings
+
+### RAF-DB 7 Basic Emotion Classes
+| Index | Emotion Class | RAF-DB Label | EfficientFace Mapping |
+| :---: | :--- | :--- | :--- |
+| `0` | **Neutral** | Neutral | Index 0 |
+| `1` | **Happy** | Happy | Index 1 |
+| `2` | **Sad** | Sad | Index 2 |
+| `3` | **Surprise** | Surprise | Index 3 |
+| `4` | **Fear** | Fear | Index 4 |
+| `5` | **Disgust** | Disgust | Index 5 |
+| `6` | **Angry** | Angry | Index 6 |
+
+### FER2013 7 Emotion Classes
+| Index | Class Name | FER2013 Standard Index |
+| :---: | :--- | :--- |
+| `0` | **Angry** | Index 0 |
+| `1` | **Disgust** | Index 1 |
+| `2` | **Fear** | Index 2 |
+| `3` | **Happy** | Index 3 |
+| `4` | **Sad** | Index 4 |
+| `5` | **Surprise** | Index 5 |
+| `6` | **Neutral** | Index 6 |
+
+---
+
+## 3. Pipeline Architecture
 
 ```text
                                   EMOVISION PIPELINE ARCHITECTURE
@@ -32,26 +58,16 @@ The system features:
   │  Webcam /    │    │ SCRFD-500M ONNX            │    │  5-Point Geometric Affine      │
   │ Image / Video├────► Face Detector Engine        ├────► Alignment (224x224 Standard) │
   └──────────────┘     └────────────────────────────┘     └───────────────┬────────────────┘
-                                                                            │
+                                                                             │
   ┌──────────────┐     ┌────────────────────────────┐                     │ N Aligned Chips
   │ React UI     │     │ FastAPI REST / WS Engine   │                     ▼
   │ Live Stream  │◄────┤ Asynchronous Job Manager   │◄────────────────────┴────────────────┐
-  │ & Dashboard  │     │ Telemetry Broadcast JSON   │  Official EfficientFace Model        │
-  └──────────────┘     └────────────────────────────┘  1.27M Params | 88.23% RAF-DB Acc   │
-                                                       Classes: Neutral, Happy, Sad,      │
-                                                       Surprise, Fear, Disgust, Angry      │
+  │ & Dashboard  │     │ Telemetry Broadcast JSON   │  Multi-Model Emotion Classification  │
+  └──────────────┘     └────────────────────────────┘  • EfficientFace (1.27M, 88.23% RAF) │
+                                                       • DAN Cross-Attention (89.70% RAF) │
+                                                       • EmotionCNN (FER2013 7-Class)    │
                                                        └───────────────────────────────────┘
 ```
-
----
-
-## 3. Technology Stack
-
-- **Computer Vision & Inference**: Python 3.10+, PyTorch (`torch`), OpenCV, ONNX Runtime (`onnxruntime`), NumPy, SciPy.
-- **Backend Infrastructure**: FastAPI, Uvicorn, WebSockets, Asyncio, Pydantic v2, Python-Multipart.
-- **Database & Storage**: Supabase Python SDK, PostgreSQL Cloud Database, SQLite3 local fallback.
-- **Frontend Web UI**: React 19, TypeScript, Vite, Tailwind CSS, Lucide React icons, Recharts.
-- **Testing Suite**: Pytest, TestClient, Httpx, End-to-End Multi-Face Acceptance & Video Lifecycle Test Suites.
 
 ---
 
@@ -59,68 +75,61 @@ The system features:
 
 ```text
 Emovision/
-├── README.md                     # Project documentation & setup instructions
-├── backend/                      # Python FastAPI Backend & Computer Vision Core
+├── README.md                     # Comprehensive project documentation
+├── backend/                      # Python FastAPI Backend & Computer Vision Engine
 │   ├── app/
-│   │   ├── api/                 # REST endpoints (analyze.py, sessions.py, ws.py)
+│   │   ├── api/                 # REST endpoints (ws.py, analyze.py, session.py, analytics.py)
 │   │   ├── core/                # Configuration and global settings (config.py)
-│   │   ├── db/                  # Database connections & Supabase repository
-│   │   ├── models_weights/      # Pretrained models (scrfd_500m_bnkps.onnx)
-│   │   └── services/            # SCRFD detector, face aligner, & emotion classifier
-│   ├── efficientface_repo/      # EfficientFace model checkpoint & architecture
-│   ├── test_acceptance.py       # Multi-face acceptance test suite (1, 2, 3, 5 faces)
+│   │   ├── db/                  # Database repository (Supabase PostgreSQL + SQLite fallback)
+│   │   ├── ml/                  # Alternative model classes & dataset utilities
+│   │   │   ├── dan.py           # DAN (Distract Your Attention) model architecture
+│   │   │   ├── model.py         # Custom EmotionCNN PyTorch model
+│   │   │   ├── dataset.py       # FER2013 dataset loader and preprocessing
+│   │   │   ├── train.py         # PyTorch model training loop
+│   │   │   └── evaluate.py      # Confusion matrix & metrics generator
+│   │   ├── models_weights/      # Pretrained ONNX weights (scrfd_500m_bnkps.onnx)
+│   │   └── services/            # RealtimePipeline, EfficientFace, SCRFD, FaceAligner
+│   ├── efficientface_repo/      # Official EfficientFace model checkpoint & architecture
+│   ├── prepare_fer2013_csv.py   # FER2013 dataset preparation script
+│   ├── run_exp1_class_weighted.py # Experiment 1 (Class-Weighted Loss)
+│   ├── run_exp2_improved_model.py # Experiment 2 (Focal Loss & Data Augmentation)
+│   ├── run_transfer_learning_experiments.py # Transfer learning suite
+│   ├── eval_and_generate_plots.py # Plot and metrics generator
+│   ├── test_full_suite.py       # Master automated test suite
+│   ├── test_acceptance.py       # Multi-face detection acceptance tests
 │   ├── test_upload_analysis.py  # Image & video upload test suite
-│   ├── test_video_lifecycle_and_persistence.py # Async video job & persistence test
+│   ├── test_video_lifecycle_and_persistence.py # Async video job test
 │   └── main.py                  # FastAPI application entrypoint
 └── frontend/                     # React + Vite + TypeScript Web Frontend
     ├── src/
-    │   ├── components/          # Reusable UI components & PDF exporter
+    │   ├── components/          # Reusable UI components & PDF report generator
     │   ├── screens/             # Live Detection, Image Upload, Video Upload, Analytics, History
-    │   └── services/            # API & WebSocket client services
+    │   ├── services/            # API & WebSocket client services
+    │   └── utils/               # Timezone-aware date formatting (Asia/Kolkata)
     └── package.json             # Frontend dependencies & Vite scripts
 ```
 
 ---
 
-## 5. RAF-DB 7-Class Emotion Mapping
+## 5. Technology Stack
 
-| Index | Emotion Class | Notes |
-| :---: | :--- | :--- |
-| `0` | **Neutral** | EfficientFace Index 0 |
-| `1` | **Happy** | EfficientFace Index 1 |
-| `2` | **Sad** | EfficientFace Index 2 |
-| `3` | **Surprise** | EfficientFace Index 3 |
-| `4` | **Fear** | EfficientFace Index 4 |
-| `5` | **Disgust** | EfficientFace Index 5 |
-| `6` | **Angry** | EfficientFace Index 6 |
-
-- **Image Normalization**: Mean `[0.57535914, 0.44928582, 0.40079932]`, Std `[0.20735591, 0.18981615, 0.18132027]`
-- **Input Dimensions**: `(N, 3, 224, 224)` RGB float tensor
-- **Hardware Execution**: Optimized 8-thread CPU batch processing
+- **Computer Vision & Deep Learning**: PyTorch (`torch`), torchvision, OpenCV, ONNX Runtime (`onnxruntime`), NumPy, SciPy, timm.
+- **Backend Infrastructure**: FastAPI, Uvicorn, WebSockets, Asyncio, Pydantic v2, Python-Multipart, SQLAlchemy.
+- **Database & Storage**: Supabase Python SDK, PostgreSQL Cloud Database, SQLite3 local fallback.
+- **Frontend Web UI**: React 19, TypeScript, Vite, Tailwind CSS, Lucide React icons, Recharts.
+- **Testing & Benchmarks**: Pytest, TestClient, Httpx, Acceptance & Integration Test Suites.
 
 ---
 
 ## 6. How to Run Locally
 
-### 1. Run Verification Test Suites
-```bash
-# Navigate to backend directory
-cd backend
-
-# Run Multi-Face Detection Acceptance Suite (1, 2, 3, 5 faces)
-.venv\Scripts\python test_acceptance.py
-
-# Run Asynchronous Video Lifecycle & Supabase Persistence Test
-.venv\Scripts\python test_video_lifecycle_and_persistence.py
-```
-
-### 2. Start Backend API Server
+### 1. Start Backend API Server
 ```bash
 cd backend
-.venv\Scripts\python -m uvicorn main:app --host 127.0.0.1 --port 8000
+py -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
 
-### 3. Start Frontend Web Application
+### 2. Start Frontend Web Application
 ```bash
 cd frontend
 npm run dev -- --port 5173
@@ -128,17 +137,8 @@ npm run dev -- --port 5173
 
 Open your browser at **`http://localhost:5173`**.
 
----
-
-## 7. Deployment Instructions
-
-### Frontend (Netlify / Vercel)
-1. Set Build Command: `npm run build`
-2. Set Publish Directory: `dist`
-3. Environment Variables:
-   - `VITE_API_URL`: Your backend API server URL (e.g. `https://your-emovision-backend.onrender.com`)
-
-### Backend (Render / Railway / Cloud Run)
-1. Python Version: `3.10+`
-2. Start Command: `uvicorn main:app --host 0.0.0.0 --port 8000`
-3. Install system libraries: `libgl1-mesa-glx` (for OpenCV)
+### 3. Run Automated Regression Test Suite
+```bash
+cd backend
+py test_full_suite.py
+```
