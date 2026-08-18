@@ -4,6 +4,7 @@ import type { Emotion, SessionSummary, Screen, PersonDetailCard } from '../types
 import { apiService } from '../services/api'
 import { SessionPdfReport } from '../components/SessionPdfReport'
 import { Printer, Download, User, ShieldCheck } from 'lucide-react'
+import { formatLocalDateTime } from '../utils/date'
 
 interface Props {
   onNavigate?: (screen: Screen, sessionId?: string) => void
@@ -284,7 +285,7 @@ export default function SessionHistory({ onNavigate }: Props) {
                         <span>{sType.toUpperCase()}</span>
                       </span>
                     </td>
-                    <td className="py-3 px-4 text-slate-300">{s.date}</td>
+                    <td className="py-3 px-4 text-slate-300">{formatLocalDateTime(s.date)}</td>
                     <td className="py-3 px-4 text-slate-400 font-mono">
                       {sType === 'image' ? 'N/A' : `${Math.round(s.duration_seconds)}s`}
                     </td>

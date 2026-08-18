@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
 import { PieChart, Pie, Cell, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts'
 import { EMOTIONS, EMOTION_COLORS, EMOTION_ICONS } from '../data'
-import type { Screen, SessionSummary, Emotion } from '../types'
+import type { Emotion, Screen, SessionSummary } from '../types'
 import { apiService } from '../services/api'
+import { formatLocalDateTime } from '../utils/date'
 
 interface Props {
   onNavigate: (s: Screen) => void
@@ -401,7 +402,7 @@ export default function Dashboard({ onNavigate }: Props) {
                         {s.session_name || s.session_id}
                       </div>
                       <div className="text-[11px] text-slate-400 font-mono">
-                        {sourceType.toUpperCase()} {s.date ? `· ${s.date}` : ''}
+                        {sourceType.toUpperCase()} {s.date ? `· ${formatLocalDateTime(s.date)}` : ''}
                       </div>
                     </div>
                     {sourceType !== 'image' && (
