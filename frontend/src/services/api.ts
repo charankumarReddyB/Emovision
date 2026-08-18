@@ -6,8 +6,18 @@ import type {
   PersonAnalyticsData,
 } from '../types'
 
-const rawApiUrl = (import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000').trim()
-const API_BASE_URL = rawApiUrl.replace(/\/+$/, '')
+const getApiBaseUrl = () => {
+  const envUrl =
+    import.meta.env.VITE_API_BASE_URL ||
+    import.meta.env.VITE_API_URL
+
+  if (envUrl && envUrl.trim()) {
+    return envUrl.trim().replace(/\/+$/, '')
+  }
+  return 'http://127.0.0.1:8000'
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 async function request<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const url = `${API_BASE_URL}${endpoint}`

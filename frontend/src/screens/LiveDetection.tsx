@@ -108,8 +108,16 @@ export default function LiveDetection() {
       const ws = new DetectionWebSocket({
         sessionId: sid,
         onMessage: handleMessage,
-        onStatusChange: (status) => setWsStatus(status),
-        onError: () => setErrorMsg('WebSocket stream error occurred'),
+        onStatusChange: (status) => {
+          setWsStatus(status)
+          if (status === 'connected') {
+            setErrorMsg(null)
+          }
+        },
+        onError: (errEvent) => {
+          console.error('[LiveDetection] WebSocket onError:', errEvent)
+          setErrorMsg('WebSocket connection error (check browser console for details)')
+        },
       })
       wsRef.current = ws
       ws.connect()
