@@ -10,6 +10,7 @@ import cv2
 import numpy as np
 import json
 import logging
+import traceback
 
 from app.services.realtime_pipeline import RealtimePipeline
 
@@ -26,29 +27,35 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
     """
     client_host = getattr(websocket.client, "host", "unknown") if websocket.client else "unknown"
     client_port = getattr(websocket.client, "port", "unknown") if websocket.client else "unknown"
+    print(f"[WS] CONNECTION ATTEMPT {session_id} from {client_host}:{client_port}")
     logger.info(f"[WebSocket] Connection attempt received. Session ID: {session_id} | Client: {client_host}:{client_port}")
 
     await websocket.accept()
+    print(f"[WS] ACCEPTED {session_id}")
     logger.info(f"[WebSocket] Connection ACCEPTED for Session ID: {session_id}")
 
-    pipeline = RealtimePipeline(session_id=session_id, session_name="WebSocket Live Stream")
+    pipeline = None
     frame_idx = 0
-    
+
     try:
+        pipeline = RealtimePipeline(session_id=session_id, session_name="WebSocket Live Stream")
+        
         while True:
             # 1. Receive latest base64 video frame from client
             try:
                 data = await websocket.receive_text()
             except WebSocketDisconnect as e:
-                logger.info(f"[WebSocket] Client disconnected cleanly via WebSocketDisconnect. Session ID: {session_id} | Code: {getattr(e, 'code', 'N/A')}")
+                print(f"[WS] CLIENT DISCONNECTED {session_id} code={getattr(e, 'code', 'N/A')}")
                 break
             except Exception as e:
-                logger.warning(f"[WebSocket] Frame receive exception. Session ID: {session_id} | Reason: {str(e)}")
+                print(f"[WS] FRAME RECEIVE EXCEPTION {session_id}: {e}")
                 break
 
             if not data:
                 await asyncio.sleep(0.005)
                 continue
+
+            print(f"[WS] FRAME RECEIVED {session_id}")
 
             if "," in data:
                 data = data.split(",")[1]
@@ -58,20 +65,23 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
                 nparr = np.frombuffer(img_bytes, np.uint8)
                 frame = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
             except Exception as e:
-                logger.warning(f"[WebSocket] Frame base64 decode error in Session '{session_id}': {e}")
+                print(f"[WS] DECODE ERROR {session_id}: {e}")
                 continue
 
             if frame is None or frame.size == 0:
+                print(f"[WS] EMPTY FRAME {session_id}")
                 await asyncio.sleep(0.005)
                 continue
 
+            print(f"[WS] FRAME DECODED {frame.shape}")
             frame_idx += 1
-            if frame_idx % 100 == 1:
-                logger.info(f"[WebSocket] Session ID '{session_id}' processing frame #{frame_idx}")
             
             # 2. Execute face detection + alignment + MobileFaceNet ONNX classifier
             annotated_frame, live_stats, classified_detections = pipeline.process_frame_with_detections(frame, frame_idx)
             
+            print(f"[WS] SCRFD RESULT faces={len(classified_detections)}")
+            print(f"[WS] EMOTION RESULT {[d.get('emotion') for d in classified_detections]}")
+
             h, w = frame.shape[:2]
             people_list = []
             faces_list = []
@@ -116,16 +126,19 @@ async def websocket_detection_stream(websocket: WebSocket, session_id: str):
 
             try:
                 await websocket.send_text(json.dumps(payload))
+                print(f"[WS] RESPONSE SENT {session_id}")
             except Exception as e:
-                logger.warning(f"[WebSocket] send_text exception in Session '{session_id}': {e}")
+                print(f"[WS] SEND ERROR {session_id}: {e}")
                 break
                 
             await asyncio.sleep(0.002)
 
     except WebSocketDisconnect as e:
-        logger.info(f"[WebSocket] Client disconnected. Session ID: {session_id} | Code: {getattr(e, 'code', 'N/A')} | Reason: {getattr(e, 'reason', 'N/A')}")
+        print(f"[WS] DISCONNECTED {session_id} code={getattr(e, 'code', 'N/A')}")
     except Exception as e:
-        logger.error(f"[WebSocket] Stream exception for Session ID '{session_id}': {e}", exc_info=True)
+        print(f"[WS] EXCEPTION in session {session_id}: {e}")
+        traceback.print_exc()
     finally:
-        logger.info(f"[WebSocket] Closing pipeline for Session ID: {session_id} (Total frames processed: {frame_idx})")
-        pipeline.close()
+        print(f"[WS] CLOSED {session_id}")
+        if pipeline:
+            pipeline.close()
