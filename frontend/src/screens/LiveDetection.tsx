@@ -114,9 +114,11 @@ export default function LiveDetection() {
             setErrorMsg(null)
           }
         },
-        onError: (errEvent) => {
-          console.error('[LiveDetection] WebSocket onError:', errEvent)
-          setErrorMsg('WebSocket connection error (check browser console for details)')
+        onError: (diag) => {
+          console.error('[LiveDetection] WebSocket onError:', diag)
+          const codeInfo = diag.code ? ` | Close Code: ${diag.code}` : ''
+          const reasonInfo = diag.reason && diag.reason !== 'None' ? ` | Reason: ${diag.reason}` : ''
+          setErrorMsg(`URL: ${diag.url}${codeInfo}${reasonInfo} | ReadyState: ${diag.readyState}`)
         },
       })
       wsRef.current = ws

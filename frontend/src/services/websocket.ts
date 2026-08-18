@@ -34,15 +34,23 @@ const getWsBaseUrl = () => {
   return isHttps ? 'wss://127.0.0.1:8000' : 'ws://127.0.0.1:8000'
 }
 
-const WS_BASE_URL = getWsBaseUrl()
+export const WS_BASE_URL = getWsBaseUrl()
 
 export type WebSocketStatus = 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'error'
+
+export interface DetailedWSError {
+  url: string
+  readyState: number
+  code?: number
+  reason?: string
+  wasClean?: boolean
+}
 
 export interface DetectionWebSocketOptions {
   sessionId: string
   onMessage: (data: DetectionPayload) => void
   onStatusChange?: (status: WebSocketStatus) => void
-  onError?: (error: Event) => void
+  onError?: (error: DetailedWSError) => void
   autoReconnect?: boolean
 }
 
@@ -51,7 +59,7 @@ export class DetectionWebSocket {
   private sessionId: string
   private onMessage: (data: DetectionPayload) => void
   private onStatusChange?: (status: WebSocketStatus) => void
-  private onError?: (error: Event) => void
+  private onError?: (error: DetailedWSError) => void
   private autoReconnect: boolean
   private status: WebSocketStatus = 'disconnected'
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null
@@ -101,7 +109,12 @@ export class DetectionWebSocket {
         console.error('[DetectionWS] Error Event:', event)
         console.error('[DetectionWS] WebSocket ReadyState:', this.ws?.readyState)
         this.setStatus('error')
-        if (this.onError) this.onError(event)
+        if (this.onError) {
+          this.onError({
+            url,
+            readyState: this.ws?.readyState ?? 3,
+          })
+        }
       }
 
       this.ws.onclose = (event: CloseEvent) => {
@@ -109,6 +122,16 @@ export class DetectionWebSocket {
         console.warn(`[DetectionWS]   Code: ${event.code}`)
         console.warn(`[DetectionWS]   Reason: ${event.reason || '(none)'}`)
         console.warn(`[DetectionWS]   wasClean: ${event.wasClean}`)
+
+        if (!this.isIntentionallyClosed && this.onError) {
+          this.onError({
+            url,
+            readyState: this.ws?.readyState ?? 3,
+            code: event.code,
+            reason: event.reason || 'None',
+            wasClean: event.wasClean,
+          })
+        }
 
         if (this.isIntentionallyClosed) {
           console.log('[DetectionWS] Connection closed intentionally.')
@@ -124,6 +147,13 @@ export class DetectionWebSocket {
     } catch (err) {
       console.error('[DetectionWS] Exception during WebSocket constructor/connect:', err)
       this.setStatus('error')
+      if (this.onError) {
+        this.onError({
+          url,
+          readyState: 3,
+          reason: String(err),
+        })
+      }
     }
   }
 
