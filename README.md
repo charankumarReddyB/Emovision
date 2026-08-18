@@ -3,6 +3,8 @@
 **Capstone Project**  
 *High-Accuracy, Real-Time Multi-Face Facial Expression Recognition Using SCRFD-500M ONNX Face Detection, 5-Point Geometric Affine Face Alignment, and Multi-Model Architectures (EfficientFace, DAN, EmotionCNN) Supported across RAF-DB and FER2013 Datasets.*
 
+**GitHub Repository**: [https://github.com/charankumarReddyB/Emovision.git](https://github.com/charankumarReddyB/Emovision.git)
+
 ---
 
 ## 1. Project Overview
@@ -11,7 +13,7 @@
 
 The platform supports multiple model architectures and dataset pipelines:
 
-### Primary Models & Detectors
+### Primary Production Models & Detectors
 - **Primary Face Detector**: **SCRFD-500M** (`scrfd_500m_bnkps.onnx`) ONNX engine with letterbox padding, high NMS IoU filtering, and 5 facial keypoint detection (`left_eye`, `right_eye`, `nose`, `left_mouth`, `right_mouth`).
 - **Primary Live Emotion Model**: Lightweight **EfficientFace** (`efficientface_rafdb.pth`, 1.27M parameters, **88.23% RAF-DB accuracy**, **196.5 frames/sec on CPU**).
 
@@ -76,9 +78,10 @@ The platform supports multiple model architectures and dataset pipelines:
 ```text
 Emovision/
 ├── README.md                     # Comprehensive project documentation
+├── .gitignore                    # Excludes node_modules, cache, and secrets
 ├── backend/                      # Python FastAPI Backend & Computer Vision Engine
 │   ├── app/
-│   │   ├── api/                 # REST endpoints (ws.py, analyze.py, session.py, analytics.py)
+│   │   ├── api/                 # REST & WS endpoints (ws.py, analyze.py, session.py, analytics.py)
 │   │   ├── core/                # Configuration and global settings (config.py)
 │   │   ├── db/                  # Database repository (Supabase PostgreSQL + SQLite fallback)
 │   │   ├── ml/                  # Alternative model classes & dataset utilities
@@ -99,6 +102,7 @@ Emovision/
 │   ├── test_acceptance.py       # Multi-face detection acceptance tests
 │   ├── test_upload_analysis.py  # Image & video upload test suite
 │   ├── test_video_lifecycle_and_persistence.py # Async video job test
+│   ├── requirements.txt         # Backend Python dependencies
 │   └── main.py                  # FastAPI application entrypoint
 └── frontend/                     # React + Vite + TypeScript Web Frontend
     ├── src/
@@ -106,6 +110,8 @@ Emovision/
     │   ├── screens/             # Live Detection, Image Upload, Video Upload, Analytics, History
     │   ├── services/            # API & WebSocket client services
     │   └── utils/               # Timezone-aware date formatting (Asia/Kolkata)
+    ├── .env                     # Local environment settings (VITE_API_URL=http://127.0.0.1:8000)
+    ├── .env.example             # Environment variable template
     └── package.json             # Frontend dependencies & Vite scripts
 ```
 
@@ -123,22 +129,84 @@ Emovision/
 
 ## 6. How to Run Locally
 
-### 1. Start Backend API Server
+### Step 1: Clone the Repository
 ```bash
+git clone https://github.com/charankumarReddyB/Emovision.git
+cd Emovision
+```
+
+### Step 2: Set Up & Run Backend Server (FastAPI)
+```bash
+# Navigate to backend directory
 cd backend
+
+# Install Python dependencies
+py -m pip install -r requirements.txt
+
+# Start FastAPI server on port 8000
 py -m uvicorn main:app --host 127.0.0.1 --port 8000
 ```
+- Backend API will be available at: **`http://127.0.0.1:8000`**
+- Swagger Interactive Documentation: **`http://127.0.0.1:8000/docs`**
 
-### 2. Start Frontend Web Application
+### Step 3: Set Up & Run Frontend Web App (React + Vite)
+Open a new terminal window:
 ```bash
+# Navigate to frontend directory
 cd frontend
-npm run dev -- --port 5173
+
+# Install Node dependencies
+npm install
+
+# Start Vite development server on port 5173
+npm run dev
 ```
+- Frontend Web App will be available at: **`http://localhost:5173`**
 
-Open your browser at **`http://localhost:5173`**.
-
-### 3. Run Automated Regression Test Suite
+### Step 4: Run Automated Regression Test Suite
 ```bash
+# Navigate to backend directory
 cd backend
+
+# Run master test suite (Models, Alignment, Multi-Face Batching, API & DB Persistence)
 py test_full_suite.py
 ```
+
+---
+
+## 7. How to Update & Push to GitHub
+
+### 1. Check Git Status & Staged Changes
+```bash
+git status
+```
+
+### 2. Stage All Cleaned Changes
+```bash
+git add .
+```
+
+### 3. Commit Changes with Descriptive Message
+```bash
+git commit -m "feat: complete project architecture, multi-model support, and local execution setup"
+```
+
+### 4. Push to Main Branch on GitHub
+```bash
+git push origin main
+```
+
+---
+
+## 8. Production Cloud Deployment Commands
+
+### Backend Deployment (Render / Cloud Run / Docker)
+- **Build / Install Command**: `pip install -r backend/requirements.txt`
+- **Start Command**: `uvicorn main:app --host 0.0.0.0 --port $PORT`
+- **Docker Command**: `docker build -t emovision-backend ./backend`
+
+### Frontend Deployment (Netlify / Vercel)
+- **Build Command**: `npm run build`
+- **Publish Directory**: `dist`
+- **Environment Variables**:
+  - `VITE_API_URL`: `http://127.0.0.1:8000` (for local backend) or `https://your-backend.onrender.com` (for cloud)
