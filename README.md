@@ -163,6 +163,16 @@ npm run dev
 ```
 - Frontend Web App will be available at: **`http://localhost:5173`**
 
+> 💡 **Windows PowerShell Tip**: If PowerShell displays `cannot be loaded because running scripts is disabled on this system`, use `npm.cmd` or run via Command Prompt (`cmd`):
+> ```cmd
+> npm.cmd install
+> npm.cmd run dev
+> ```
+> Or enable execution policy for the current session in PowerShell:
+> ```powershell
+> Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+> ```
+
 ### Step 4: Run Automated Regression Test Suite
 ```bash
 # Navigate to backend directory
